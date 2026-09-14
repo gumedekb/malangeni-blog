@@ -56,7 +56,7 @@ export function UserMenu() {
                     {profile.username}
                   </span>
                   {canModerate(profile) && (
-                    <span className="shrink-0 rounded-full bg-[#f6efe2] px-2 py-[2px] text-[10px] font-semibold uppercase tracking-[0.5px] text-gold">
+                    <span className="shrink-0 rounded-full bg-tag px-2 py-[2px] text-[10px] font-semibold uppercase tracking-[0.5px] text-gold">
                       {profile.role}
                     </span>
                   )}
@@ -94,7 +94,7 @@ export function UserMenu() {
               <div className="border-b border-line px-4 py-3">
                 <div className="text-sm font-semibold">Welcome</div>
                 <div className="text-xs text-muted">
-                  Sign in to post, join groups and book services.
+                  Sign in to post, join groups and list your services.
                 </div>
               </div>
               <MenuLink

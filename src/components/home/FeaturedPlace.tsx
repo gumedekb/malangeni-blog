@@ -1,37 +1,54 @@
-import Link from "next/link";
-import { Stars } from "@/components/ui/Stars";
-import { FEATURED_PLACE } from "@/lib/data";
+"use client";
 
-/** The hero "Featured place" card on the home page. */
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { api, PLACE_ENDPOINTS } from "@/lib/api";
+import { byRating } from "@/lib/places";
+import type { ApiAttraction, Page } from "@/lib/types";
+
+/** The hero "Featured place" card on the home page: the best-rated place on Explore. */
 export function FeaturedPlace() {
-  const place = FEATURED_PLACE;
+  const [place, setPlace] = useState<ApiAttraction | null | undefined>(undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const page = await api.get<Page<ApiAttraction>>(PLACE_ENDPOINTS.list);
+        const best = [...(page?.content ?? [])].sort(byRating)[0] ?? null;
+        if (!cancelled) setPlace(best);
+      } catch {
+        if (!cancelled) setPlace(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <article className="grid grid-cols-1 overflow-hidden rounded-card border border-line bg-card md:grid-cols-2">
       <div
         role="img"
-        aria-label={`${place.name} at night`}
-        className="min-h-[200px] bg-cover bg-center md:min-h-[280px]"
-        style={{ backgroundImage: `url('${place.image}')` }}
+        aria-label={place ? place.name : "Featured place"}
+        className="min-h-[200px] bg-paper bg-cover bg-center md:min-h-[280px]"
+        style={place?.imageUrl ? { backgroundImage: `url('${place.imageUrl}')` } : undefined}
       />
       <div className="flex flex-col p-[22px]">
         <span className="text-[11px] font-semibold uppercase tracking-[1.5px] text-gold">
-          {place.eyebrow}
+          Featured place
         </span>
         <h2 className="mb-2 mt-1.5 font-serif text-[25px] font-semibold">
-          {place.name}
+          {place === undefined ? "Loading…" : place ? place.name : "Explore Malangeni"}
         </h2>
-        <p className="text-sm text-muted">{place.blurb}</p>
-        <div className="mt-auto pt-[18px]">
-          <div className="mb-1.5 text-[11px] uppercase tracking-[1px] text-muted">
-            Visitor rating
-          </div>
-          <Stars rating={place.rating} className="text-lg tracking-[2px]" />
-        </div>
+        <p className="text-sm text-muted">
+          {place?.description ?? "Places, spaces and points of interest around Malangeni."}
+        </p>
         <Link
           href="/explore"
-          className="mt-3.5 self-start rounded-lg bg-ink px-[18px] py-2.5 text-[13px] font-semibold text-white"
+          className="mt-auto self-start rounded-lg bg-ink px-[18px] py-2.5 text-[13px] font-semibold text-on-ink"
         >
-          Visit page
+          Explore places
         </Link>
       </div>
     </article>

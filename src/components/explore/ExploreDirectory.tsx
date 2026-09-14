@@ -1,17 +1,36 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PlaceCard, FeaturedPlaceCard } from "./PlaceCard";
-import { EXPLORE_CATEGORIES, PLACES } from "@/lib/data";
+import { api, PLACE_ENDPOINTS } from "@/lib/api";
+import { EXPLORE_CATEGORIES } from "@/lib/data";
+import { byRating, toPlace } from "@/lib/places";
+import type { ApiAttraction, Page, Place } from "@/lib/types";
 
 export function ExploreDirectory() {
   const [query, setQuery] = useState("");
   const [category, setCategory] =
     useState<(typeof EXPLORE_CATEGORIES)[number]>("All");
+  const [places, setPlaces] = useState<Place[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const page = await api.get<Page<ApiAttraction>>(PLACE_ENDPOINTS.list);
+        if (!cancelled) setPlaces([...(page?.content ?? [])].sort(byRating).map(toPlace));
+      } catch {
+        if (!cancelled) setPlaces([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const results = useMemo(() => {
     const term = query.trim().toLowerCase();
-    return PLACES.filter((place) => {
+    const filtered = (places ?? []).filter((place) => {
       const matchesCategory =
         category === "All" || place.category === category;
       const matchesTerm =
@@ -20,7 +39,10 @@ export function ExploreDirectory() {
         place.category.toLowerCase().includes(term);
       return matchesCategory && matchesTerm;
     });
-  }, [query, category]);
+    // The best-rated place leads the unfiltered grid as the wide featured card.
+    const featureFirst = category === "All" && term === "";
+    return filtered.map((place, i) => ({ ...place, featured: featureFirst && i === 0 }));
+  }, [places, query, category]);
 
   return (
     <>
@@ -38,7 +60,7 @@ export function ExploreDirectory() {
         />
         <button
           type="submit"
-          className="cursor-pointer rounded-[10px] bg-ink px-[22px] py-3.5 text-sm font-semibold text-white sm:py-0"
+          className="cursor-pointer rounded-[10px] bg-ink px-[22px] py-3.5 text-sm font-semibold text-on-ink sm:py-0"
         >
           Search
         </button>
@@ -62,9 +84,13 @@ export function ExploreDirectory() {
       </div>
 
       <section className="mt-[26px] grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-3">
-        {results.length === 0 ? (
+        {places === null ? (
+          <p className="col-span-full py-10 text-center text-sm text-muted">Loading…</p>
+        ) : results.length === 0 ? (
           <p className="col-span-full py-10 text-center text-sm text-muted">
-            No places match your search. Try another category or term.
+            {places.length === 0
+              ? "No places have been added yet."
+              : "No places match your search. Try another category or term."}
           </p>
         ) : (
           results.map((place) =>

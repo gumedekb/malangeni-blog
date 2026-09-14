@@ -6,6 +6,7 @@ import { Container } from "./Container";
 import { UserMenu } from "./UserMenu";
 import { MobileNav } from "./MobileNav";
 import { NotificationBell } from "./NotificationBell";
+import { ThemeToggle } from "./ThemeToggle";
 import { NAV_LINKS } from "@/lib/nav";
 
 export function Header() {
@@ -49,6 +50,7 @@ export function Header() {
           </div>
 
           <div className="ml-auto flex items-center gap-2.5 md:ml-0 md:gap-[14px]">
+            <ThemeToggle />
             <NotificationBell />
             <UserMenu />
           </div>

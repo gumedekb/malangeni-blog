@@ -22,6 +22,12 @@ export interface CommunityEvent {
   time: string;
   location: string;
   tag: "important" | "fun" | null;
+  /** Detail-page fields; mock events leave them out. */
+  description?: string | null;
+  dateLabel?: string;
+  organiser?: string | null;
+  contactNumber?: string | null;
+  imageUrl?: string | null;
 }
 
 export type FeedType = "news" | "notice" | "job";
@@ -47,10 +53,6 @@ export interface Place {
   name: string;
   category: Category;
   image: string;
-  /** Distance from the user in km (backend-computed). */
-  distanceKm?: number;
-  /** Average rating out of 5. */
-  rating?: number;
   featured?: boolean;
   description?: string;
 }
@@ -118,24 +120,19 @@ export interface Member {
   color: string;
 }
 
-export type ServiceStatus = "open" | "busy";
-
-export interface Service {
-  id: string;
-  icon: string;
-  title: string;
-  description: string;
-  status: ServiceStatus;
-  statusLabel: string;
-  actionLabel: string;
-  /** Rendered as the dark, highlighted "primary" card. */
-  primary?: boolean;
-  badge?: string;
-}
-
-export interface OpeningHour {
-  label: string;
-  value: string;
+/** Malangeni Library details from `/api/library`. Times are "HH:mm:ss"; a null pair means closed. */
+export interface LibraryDetails {
+  name: string;
+  about?: string | null;
+  location?: string | null;
+  mapsUrl?: string | null;
+  weekdayOpen?: string | null;
+  weekdayClose?: string | null;
+  saturdayOpen?: string | null;
+  saturdayClose?: string | null;
+  sundayOpen?: string | null;
+  sundayClose?: string | null;
+  updatedAt?: string | null;
 }
 
 /**
@@ -159,4 +156,133 @@ export interface AppNotification {
   timeAgo: string;
   /** Where tapping the notification takes the member. */
   href: string;
+}
+
+/** A community group as the backend returns it. */
+export interface ApiGroup {
+  id: string;
+  name: string;
+  icon?: string | null;
+  description?: string | null;
+  memberCount?: number;
+  /** Only present when the request was signed in. */
+  joinedByCurrentUser?: boolean;
+}
+
+export interface GroupMembership {
+  id: string;
+  groupId: string;
+  userId: string;
+  user?: { id: string; username: string; avatarUrl?: string | null; role?: string; badge?: string | null };
+  joinedAt: string;
+}
+
+/** An event as the backend returns it (`startAt` is local time, no zone). */
+export interface ApiEvent {
+  id: string;
+  title: string;
+  description?: string | null;
+  location: string;
+  startAt: string;
+  tag: "IMPORTANT" | "FUN";
+  organiserId?: string | null;
+  status?: EventStatus;
+  /** SA cellphone number — public on purpose, so people can ask for details. */
+  contactNumber?: string | null;
+  imageUrl?: string | null;
+  /** The hub team's note to the organiser (what to change, or how it was checked). */
+  reviewNote?: string | null;
+  reviewedBy?: { id: string; username: string } | null;
+  reviewedAt?: string | null;
+  createdAt?: string;
+  organiser?: { id: string; username: string } | null;
+}
+
+/**
+ * A local business directory listing. Information only — the hub is not a shop
+ * builder: no products, no ordering, no per-shop website.
+ */
+export interface Shop {
+  id: string;
+  ownerId: string;
+  owner?: { id: string; username: string; avatarUrl?: string | null; badge?: string | null };
+  name: string;
+  description?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  latitude?: string | null;
+  longitude?: string | null;
+  /** "HH:mm:ss" from the backend. */
+  openingTime?: string | null;
+  closingTime?: string | null;
+  /** Set by the hub team; unapproved listings are hidden from the public. */
+  approved: boolean;
+  /** Set by the owner; false hides the listing without deleting it. */
+  active: boolean;
+  createdAt: string;
+}
+
+export interface ShopInput {
+  name: string;
+  description?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  openingTime?: string;
+  closingTime?: string;
+}
+
+/** Mirrors badge requests: members submit, the hub team approves or sends it back. */
+export type EventStatus = "PENDING" | "APPROVED" | "NEEDS_CHANGES";
+
+/** What kind of service a member offers; labels and icons live in `lib/services.ts`. */
+export type ServiceCategory =
+  | "PLUMBING"
+  | "ELECTRICAL"
+  | "BUILDING"
+  | "MECHANIC"
+  | "TRANSPORT"
+  | "TUTORING"
+  | "HAIR_BEAUTY"
+  | "CATERING"
+  | "CLEANING"
+  | "GARDENING"
+  | "CHILDCARE"
+  | "IT_REPAIRS"
+  | "OTHER";
+
+/**
+ * A service a member offers, as the backend returns it. Listed by anyone,
+ * approved by the hub team — same states as events.
+ */
+export interface ApiService {
+  id: string;
+  name: string;
+  serviceCategory: ServiceCategory;
+  description?: string | null;
+  /** SA cellphone number — public on purpose, so people can book. */
+  contactNumber?: string | null;
+  areaServed?: string | null;
+  operatingHours?: string | null;
+  imageUrl?: string | null;
+  status?: EventStatus;
+  reviewNote?: string | null;
+  reviewedBy?: { id: string; username: string } | null;
+  reviewedAt?: string | null;
+  providerId?: string | null;
+  provider?: { id: string; username: string; avatarUrl?: string | null; role?: string; badge?: string | null } | null;
+  createdAt?: string;
+}
+
+/** A place on Explore, as the backend's `/api/attractions` returns it. */
+export interface ApiAttraction {
+  id: string;
+  name: string;
+  description?: string | null;
+  location: string;
+  imageUrl?: string | null;
+  category?: { id: string; name: string } | null;
+  averageRating?: number | null;
+  ratingCount?: number | null;
 }

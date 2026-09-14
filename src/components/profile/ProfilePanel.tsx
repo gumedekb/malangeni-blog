@@ -10,6 +10,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { UserBadges } from "@/components/ui/UserBadges";
 import { PostCard } from "./PostCard";
 import { BadgeRequestForm } from "./BadgeRequestForm";
+import { BusinessListingCard } from "./BusinessListingCard";
 
 /**
  * The member's own profile: their identity and picture on the left, everything
@@ -151,7 +152,8 @@ function ProfileEditor() {
                   ? "Change picture"
                   : "Upload picture"}
             </button>
-            {profile.avatarUrl && (
+            {/* Nothing to remove when the picture is just the Google photo. */}
+            {profile.avatarUrl && !profile.avatarUrl.includes("googleusercontent.com") && (
               <button
                 type="button"
                 onClick={() => void onRemovePicture()}
@@ -208,6 +210,7 @@ function ProfileEditor() {
         </section>
 
         <BadgeRequestForm />
+        <BusinessListingCard />
       </div>
 
       {/* Right column — the member's posts */}

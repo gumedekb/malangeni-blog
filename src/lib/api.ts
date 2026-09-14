@@ -12,7 +12,8 @@
  *
  * Public (no auth required) GETs:
  *   /api/news, /api/attractions, /api/categories, /api/services, /api/projects,
- *   /api/posts, /api/groups, /api/events, /api/shops, /api/sponsors/active
+ *   /api/posts, /api/groups, /api/events, /api/shops, /api/sponsors/active,
+ *   /api/library
  * Everything else — and every POST/PUT/PATCH/DELETE — requires a signed-in user.
  *
  * The backend origin comes from NEXT_PUBLIC_API_BASE_URL. `next dev` reads it
@@ -48,7 +49,87 @@ export const STAFF_ENDPOINTS = {
   users: (page = 0) => `/api/users?page=${page}&size=20&sort=createdAt,desc`,
   /** Admin only: USER ⇄ MODERATOR. ADMIN is set in backend config, never here. */
   role: (id: string) => `/api/users/${encodeURIComponent(id)}/role`,
+  /** Verification log: who verified or rejected whom, newest first. */
+  badgeLog: (page = 0) => `/api/badge-requests/log?page=${page}&size=20`,
+  /** Directory listings: `approved=false` is the queue, `true` the live ones. */
+  shops: (approved: boolean, page = 0) =>
+    `/api/shops/review?approved=${approved}&page=${page}&size=20`,
+  approveShop: (id: string, approved: boolean) =>
+    `/api/shops/${encodeURIComponent(id)}/approve?approved=${approved}`,
+  /** Take a member's business badge away (not admins). Also hides their listing. */
+  revokeBusiness: (userId: string) =>
+    `/api/badge-requests/users/${encodeURIComponent(userId)}/revoke`,
+  /** Event approval queue. */
+  eventReview: (status: string, page = 0) =>
+    `/api/events/review?status=${encodeURIComponent(status)}&page=${page}&size=20`,
+  approveEvent: (id: string) => `/api/events/${encodeURIComponent(id)}/approve`,
+  eventNeedsChanges: (id: string) => `/api/events/${encodeURIComponent(id)}/needs-changes`,
 };
+
+/** Local business directory — listings only, no products or ordering. */
+export const SHOP_ENDPOINTS = {
+  /** Public: approved, visible listings. */
+  list: (size = 50) => `/api/shops?size=${size}&sort=name,asc`,
+  mine: "/api/shops/mine",
+  create: "/api/shops",
+  shop: (id: string) => `/api/shops/${encodeURIComponent(id)}`,
+  active: (id: string, active: boolean) =>
+    `/api/shops/${encodeURIComponent(id)}/active?active=${active}`,
+};
+
+export const COMMUNITY_ENDPOINTS = {
+  groups: "/api/groups",
+  group: (id: string) => `/api/groups/${encodeURIComponent(id)}`,
+  join: (id: string) => `/api/groups/${encodeURIComponent(id)}/join`,
+  leave: (id: string) => `/api/groups/${encodeURIComponent(id)}/leave`,
+  members: (id: string) => `/api/groups/${encodeURIComponent(id)}/members`,
+  groupPosts: (id: string) =>
+    `/api/posts?groupId=${encodeURIComponent(id)}&size=20&sort=createdAt,desc`,
+  upcomingEvents: "/api/events/upcoming?size=50",
+  event: (id: string) => `/api/events/${encodeURIComponent(id)}`,
+  /** POST: any signed-in member submits an event (starts PENDING). */
+  events: "/api/events",
+  /** The caller's own upcoming events in every status. */
+  myEvents: "/api/events/mine",
+  /** Multipart (field `file`): optional event picture. */
+  eventImage: (id: string) => `/api/events/${encodeURIComponent(id)}/image`,
+};
+
+/** Places on Explore (the backend calls them attractions), with average ratings. */
+export const PLACE_ENDPOINTS = {
+  list: "/api/attractions?size=50",
+};
+
+/** Services members offer (plumbing, transport, tutoring…), approved by the hub team. */
+export const SERVICE_ENDPOINTS = {
+  /** Public: approved listings, alphabetical. */
+  list: "/api/services?size=100",
+  create: "/api/services",
+  service: (id: string) => `/api/services/${encodeURIComponent(id)}`,
+  /** The caller's own listings in every status. */
+  mine: "/api/services/mine",
+  /** Multipart (field `file`): optional picture. */
+  image: (id: string) => `/api/services/${encodeURIComponent(id)}/image`,
+  /** Hub team. */
+  review: (status: string, page = 0) =>
+    `/api/services/review?status=${encodeURIComponent(status)}&page=${page}&size=20`,
+  approve: (id: string) => `/api/services/${encodeURIComponent(id)}/approve`,
+  needsChanges: (id: string) => `/api/services/${encodeURIComponent(id)}/needs-changes`,
+};
+
+/** Community posts: discussions, news, notices and jobs, optionally tagged to a group. */
+export const POST_ENDPOINTS = {
+  list: (size = 20) => `/api/posts?size=${size}&sort=createdAt,desc`,
+  create: "/api/posts",
+  post: (id: string) => `/api/posts/${encodeURIComponent(id)}`,
+  /** POST to like, DELETE to unlike — both idempotent. */
+  likes: (id: string) => `/api/posts/${encodeURIComponent(id)}/likes`,
+  /** Multipart (field `file`): optional picture, author or hub team. */
+  image: (id: string) => `/api/posts/${encodeURIComponent(id)}/image`,
+};
+
+/** Malangeni Library's details: public GET, hub-team PUT. */
+export const LIBRARY_ENDPOINT = "/api/library";
 
 /** Another member's public profile. Requires sign-in; never returns email. */
 export const publicProfilePath = (username: string) =>

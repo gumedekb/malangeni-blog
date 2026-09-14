@@ -14,7 +14,7 @@ export type Role = "ADMIN" | "MODERATOR" | "USER" | "BUSINESS_OWNER";
 export type Badge = "BUSINESS";
 
 /** Where a member's request for a business badge has got to. */
-export type BadgeRequestStatus = "PENDING" | "APPROVED" | "REJECTED";
+export type BadgeRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "REVOKED";
 
 /** FORMAL = registered (e.g. CIPC); INFORMAL = spaza, salon, stall, home business. */
 export type BusinessType = "FORMAL" | "INFORMAL";
@@ -106,9 +106,15 @@ export interface BadgeRequest {
   description?: string | null;
   status: BadgeRequestStatus;
   reviewedByUserId?: string | null;
+  /** The team member who verified or rejected it. */
+  reviewedBy?: PublicProfile | null;
   reviewedAt?: string | null;
   /** Staff note; the reason shown to the member on rejection. */
   reviewNote?: string | null;
+  /** Set when an approved badge was later taken away. */
+  revokedBy?: PublicProfile | null;
+  revokedAt?: string | null;
+  revokeNote?: string | null;
   createdAt: string;
 }
 

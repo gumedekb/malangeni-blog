@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { FEED_POSTS } from "@/lib/data";
-import type { FeedPost, FeedType } from "@/lib/types";
+import { useEffect, useMemo, useState } from "react";
+import { api, POST_ENDPOINTS } from "@/lib/api";
+import { toFeedPost } from "@/lib/posts";
+import type { ApiPost, FeedPost, FeedType, Page } from "@/lib/types";
 
 type Filter = "all" | FeedType;
 
@@ -17,13 +18,32 @@ export function CommunityFeed() {
   const [filter, setFilter] = useState<Filter>("all");
   const [liked, setLiked] = useState<Record<string, boolean>>({});
 
-  const posts = useMemo(
-    () =>
-      filter === "all"
-        ? FEED_POSTS
-        : FEED_POSTS.filter((post) => post.type === filter),
-    [filter],
-  );
+  // News, Notice and Job posts from the backend (discussions stay on the Community page).
+  const [realPosts, setRealPosts] = useState<FeedPost[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const page = await api.get<Page<ApiPost>>(POST_ENDPOINTS.list(30));
+        if (cancelled) return;
+        setRealPosts(
+          (page?.content ?? [])
+            .map(toFeedPost)
+            .filter((p): p is FeedPost => p !== null),
+        );
+      } catch {
+        /* the mock feed still shows */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const posts = useMemo(() => {
+    return filter === "all" ? realPosts : realPosts.filter((post) => post.type === filter);
+  }, [filter, realPosts]);
 
   const toggleLike = (id: string) =>
     setLiked((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -40,7 +60,7 @@ export function CommunityFeed() {
               onClick={() => setFilter(f.id)}
               className={`cursor-pointer rounded-full border px-3.5 py-1.5 text-[13px] transition ${
                 filter === f.id
-                  ? "border-ink bg-ink text-white"
+                  ? "border-ink bg-ink text-on-ink"
                   : "border-line bg-card text-muted hover:text-ink"
               }`}
             >
@@ -95,7 +115,7 @@ function PostCard({
       className={`mb-5 break-inside-avoid overflow-hidden rounded-xl border border-line transition hover:-translate-y-0.5 hover:shadow-[0_6px_22px_rgba(0,0,0,0.07)] ${
         post.image
           ? "bg-card"
-          : "bg-[linear-gradient(150deg,#fff,#f6f2ec)]"
+          : "bg-[linear-gradient(150deg,var(--color-card),var(--color-paper-warm))]"
       }`}
     >
       {post.image && (
@@ -113,7 +133,7 @@ function PostCard({
             {post.authorName} · {post.timeAgo}
           </span>
           {post.type === "job" && (
-            <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-[#f7edda] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.5px] text-gold">
+            <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-tag px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.5px] text-gold">
               💼 Job
             </span>
           )}

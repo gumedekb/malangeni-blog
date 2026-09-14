@@ -32,12 +32,16 @@ export function BadgeRequestForm() {
   // A rejection is only useful with the moderator's reason, which lives on the
   // request itself rather than on the profile.
   useEffect(() => {
-    if (status !== "REJECTED") return;
+    if (status !== "REJECTED" && status !== "REVOKED") return;
     let cancelled = false;
     void (async () => {
       try {
         const mine = await api.get<BadgeRequest[]>(AUTH_ENDPOINTS.myBadgeRequests);
-        if (!cancelled) setRejectionNote(mine[0]?.reviewNote ?? null);
+        if (!cancelled) {
+          setRejectionNote(
+            (status === "REVOKED" ? mine[0]?.revokeNote : mine[0]?.reviewNote) ?? null,
+          );
+        }
       } catch {
         /* the generic rejection message still shows */
       }
@@ -103,6 +107,21 @@ export function BadgeRequestForm() {
         Run a shop, salon, taxi or any local service — registered or not? Ask to
         have it recognised so people can find you.
       </p>
+
+      {status === "REVOKED" && (
+        <p className="mt-3 rounded-lg border border-line bg-paper px-3.5 py-2.5 text-[13px] text-muted">
+          Your business badge was removed by the hub team
+          {rejectionNote ? (
+            <>
+              : <span className="text-ink">{rejectionNote}</span>
+            </>
+          ) : (
+            "."
+          )}{" "}
+          If your business is still running, you can ask again with up-to-date
+          details.
+        </p>
+      )}
 
       {status === "REJECTED" && (
         <p className="mt-3 rounded-lg border border-line bg-paper px-3.5 py-2.5 text-[13px] text-muted">

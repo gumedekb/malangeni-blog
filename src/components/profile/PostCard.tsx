@@ -8,7 +8,7 @@ export function PostCard({ post }: { post: ApiPost }) {
   return (
     <article className="rounded-xl border border-line bg-card p-[18px] transition hover:shadow-[0_4px_16px_rgba(0,0,0,0.05)]">
       <div className="mb-2 flex items-center gap-2 text-xs text-muted">
-        <span className="rounded-full bg-[#f6efe2] px-2.5 py-[3px] text-[11px] font-semibold uppercase tracking-[0.5px] text-gold">
+        <span className="rounded-full bg-tag px-2.5 py-[3px] text-[11px] font-semibold uppercase tracking-[0.5px] text-gold">
           {post.type}
         </span>
         <time dateTime={post.createdAt}>

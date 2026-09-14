@@ -52,7 +52,7 @@ export function SignInPanel() {
           Sign in
         </h1>
         <p className="mt-1 text-[14px] text-muted">
-          Sign in to post, join groups and book services.
+          Sign in to post, join groups and list your services.
         </p>
       </div>
 

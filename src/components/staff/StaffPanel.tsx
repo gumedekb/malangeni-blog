@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, STAFF_ENDPOINTS } from "@/lib/api";
 import { useAuth } from "@/lib/auth/AuthContext";
@@ -12,17 +11,49 @@ import {
   type BadgeRequestStatus,
   type StaffUser,
 } from "@/lib/auth/types";
-import type { Page } from "@/lib/types";
+import { hoursLabel } from "@/lib/shops";
+import type { Shop } from "@/lib/types";
+import { EventsAdmin } from "./EventsAdmin";
+import { GroupsAdmin } from "./GroupsAdmin";
+import { LibraryAdmin } from "./LibraryAdmin";
+import { ServicesAdmin } from "./ServicesAdmin";
+import {
+  ErrorLine,
+  Fact,
+  formatDate,
+  INPUT_CLASS,
+  MemberLink,
+  Note,
+  Pager,
+  PRIMARY_BUTTON,
+  SECONDARY_BUTTON,
+  TabButton,
+  Table,
+  usePage,
+} from "./ui";
+
+type Tab = "requests" | "log" | "listings" | "groups" | "events" | "services" | "library" | "team";
 
 /**
- * Hub-team tools: the business verification queue (admins and moderators) and
- * the team list (admins only). Hiding this page is a convenience — the backend
- * enforces every role check itself.
+ * Hub-team tools:
+ *   - Business verification — unverified / verified / rejected / revoked, with
+ *     verify, reject and revoke.
+ *   - Verification log — every decision and who made it.
+ *   - Directory listings — approve or hide business listings.
+ *   - Groups and Events — create and delete.
+ *   - Library — edit the library's details shown on /services.
+ *   - Team (admins only) — make moderators, or revoke staff and business badges
+ *     (never an admin's).
+ * Hiding this page is a convenience; the backend enforces every role itself.
  */
 export function StaffPanel() {
   const { firebaseUser, profile, loading } = useAuth();
   const router = useRouter();
-  const [tab, setTab] = useState<"requests" | "team">("requests");
+  // `/staff#groups` and `/staff#library` (linked from other pages) open straight on that tab.
+  const [tab, setTab] = useState<Tab>(() => {
+    const hash = typeof window !== "undefined" ? window.location.hash : "";
+    return hash === "#groups" ? "groups" : hash === "#library" ? "library" : "requests";
+  });
 
   useEffect(() => {
     if (!loading && !firebaseUser) router.replace("/login");
@@ -33,19 +64,34 @@ export function StaffPanel() {
     return <Note>This page is for the hub team.</Note>;
   }
 
+  const tabs: [Tab, string][] = [
+    ["requests", "Business verification"],
+    ["log", "Verification log"],
+    ["listings", "Directory listings"],
+    ["groups", "Groups"],
+    ["events", "Events"],
+    ["services", "Services"],
+    ["library", "Library"],
+  ];
+  if (isAdmin(profile)) tabs.push(["team", "Team"]);
+
   return (
     <div className="pb-16">
-      {isAdmin(profile) && (
-        <div className="mb-5 flex gap-2">
-          <TabButton active={tab === "requests"} onClick={() => setTab("requests")}>
-            Business requests
+      <div className="mb-5 flex flex-wrap gap-2">
+        {tabs.map(([key, label]) => (
+          <TabButton key={key} active={tab === key} onClick={() => setTab(key)}>
+            {label}
           </TabButton>
-          <TabButton active={tab === "team"} onClick={() => setTab("team")}>
-            Team
-          </TabButton>
-        </div>
-      )}
-      {tab === "requests" || !isAdmin(profile) ? <RequestQueue /> : <TeamList />}
+        ))}
+      </div>
+      {tab === "requests" && <RequestQueue />}
+      {tab === "log" && <VerificationLog />}
+      {tab === "listings" && <ListingsReview />}
+      {tab === "groups" && <GroupsAdmin />}
+      {tab === "events" && <EventsAdmin />}
+      {tab === "services" && <ServicesAdmin />}
+      {tab === "library" && <LibraryAdmin />}
+      {tab === "team" && isAdmin(profile) && <TeamList />}
     </div>
   );
 }
@@ -54,39 +100,23 @@ export function StaffPanel() {
 // Business verification
 // ---------------------------------------------------------------------------
 
-const STATUSES: BadgeRequestStatus[] = ["PENDING", "APPROVED", "REJECTED"];
+const STATUS_LABELS: Record<BadgeRequestStatus, string> = {
+  PENDING: "Unverified",
+  APPROVED: "Verified",
+  REJECTED: "Rejected",
+  REVOKED: "Revoked",
+};
 
 function RequestQueue() {
   const [status, setStatus] = useState<BadgeRequestStatus>("PENDING");
   const [pageNo, setPageNo] = useState(0);
   const [reload, setReload] = useState(0);
-  const [page, setPage] = useState<Page<BadgeRequest> | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const data = await api.get<Page<BadgeRequest>>(
-          STAFF_ENDPOINTS.badgeRequests(status, pageNo),
-        );
-        if (!cancelled) {
-          setPage(data);
-          setError(null);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Could not load requests.");
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [status, pageNo, reload]);
+  const { page, error } = usePage<BadgeRequest>(
+    STAFF_ENDPOINTS.badgeRequests(status, pageNo),
+    reload,
+  );
 
   function show(next: BadgeRequestStatus) {
-    setPage(null);
     setPageNo(0);
     setStatus(next);
   }
@@ -94,16 +124,16 @@ function RequestQueue() {
   return (
     <section>
       <div className="mb-4 flex flex-wrap gap-2">
-        {STATUSES.map((s) => (
+        {(Object.keys(STATUS_LABELS) as BadgeRequestStatus[]).map((s) => (
           <TabButton key={s} active={status === s} onClick={() => show(s)} small>
-            {s.charAt(0) + s.slice(1).toLowerCase()}
+            {STATUS_LABELS[s]}
           </TabButton>
         ))}
       </div>
 
       {error ? (
         <Note>{error}</Note>
-      ) : page === null ? (
+      ) : !page ? (
         <Note>Loading…</Note>
       ) : page.content.length === 0 ? (
         <Note>
@@ -114,11 +144,7 @@ function RequestQueue() {
       ) : (
         <div className="flex flex-col gap-4">
           {page.content.map((r) => (
-            <RequestCard
-              key={r.id}
-              request={r}
-              onDecided={() => setReload((n) => n + 1)}
-            />
+            <RequestCard key={r.id} request={r} onChanged={() => setReload((n) => n + 1)} />
           ))}
           <Pager page={page} onPage={setPageNo} />
         </div>
@@ -129,10 +155,10 @@ function RequestQueue() {
 
 function RequestCard({
   request,
-  onDecided,
+  onChanged,
 }: {
   request: BadgeRequest;
-  onDecided: () => void;
+  onChanged: () => void;
 }) {
   const { profile } = useAuth();
   const [note, setNote] = useState("");
@@ -141,13 +167,13 @@ function RequestCard({
 
   const isOwn = profile && String(profile.id) === String(request.userId);
 
-  async function decide(action: "approve" | "reject") {
+  async function act(url: string) {
     setError(null);
     setBusy(true);
     try {
       const body = note.trim() ? { note: note.trim() } : undefined;
-      await api.post(STAFF_ENDPOINTS[action](request.id), body);
-      onDecided();
+      await api.post(url, body);
+      onChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save the decision.");
       setBusy(false);
@@ -157,27 +183,15 @@ function RequestCard({
   return (
     <article className="rounded-card border border-line bg-card p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="font-serif text-[18px] font-semibold">
-          {request.businessName}
-        </h3>
+        <h3 className="font-serif text-[18px] font-semibold">{request.businessName}</h3>
         <span className="rounded-full bg-paper px-2.5 py-[3px] text-[11px] font-semibold uppercase tracking-[0.5px] text-muted">
-          {request.businessType === "FORMAL"
-            ? "Formal"
-            : request.businessType === "INFORMAL"
-              ? "Informal"
-              : "Type not given"}
+          {businessTypeLabel(request)}
         </span>
       </div>
 
       <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-[13.5px] sm:grid-cols-2">
         <Fact label="Requested by">
-          {request.user ? (
-            <Link href={`/u/${encodeURIComponent(request.user.username)}`} className="font-semibold text-accent">
-              {request.user.username}
-            </Link>
-          ) : (
-            "—"
-          )}
+          <MemberLink user={request.user} />
         </Fact>
         <Fact label="Requested on">{formatDate(request.createdAt)}</Fact>
         <Fact label="Category">{request.category || "—"}</Fact>
@@ -199,20 +213,20 @@ function RequestCard({
         <p className="mt-3 text-[13.5px] text-muted">{request.description}</p>
       )}
 
-      {request.status === "PENDING" ? (
-        isOwn ? (
+      {request.status !== "PENDING" && <DecisionTrail request={request} />}
+
+      {(request.status === "PENDING" || request.status === "APPROVED") &&
+        (isOwn ? (
           <p className="mt-4 text-[13px] text-muted">
-            This is your own request — another team member has to review it.
+            This is your own business — another team member has to handle it.
           </p>
         ) : (
           <div className="mt-4 border-t border-line pt-4">
-            {error && (
-              <p role="alert" className="mb-3 text-[13px] text-accent">
-                {error}
-              </p>
-            )}
+            {error && <ErrorLine>{error}</ErrorLine>}
             <label htmlFor={`note-${request.id}`} className="mb-1.5 block text-[13px] font-medium">
-              How did you confirm it? / reason (optional)
+              {request.status === "PENDING"
+                ? "How did you confirm it? / reason (optional)"
+                : "Why is the badge being revoked? (optional)"}
             </label>
             <textarea
               id={`note-${request.id}`}
@@ -220,40 +234,241 @@ function RequestCard({
               onChange={(e) => setNote(e.target.value)}
               rows={2}
               maxLength={1000}
-              placeholder="Called the number, visited the shop… or why it can't be confirmed"
-              className="w-full rounded-[10px] border border-line bg-paper px-4 py-3 text-[14px] outline-none transition focus:border-accent"
+              placeholder={
+                request.status === "PENDING"
+                  ? "Called the number, visited the shop… or why it can't be confirmed"
+                  : "Business has closed, details were false…"
+              }
+              className={INPUT_CLASS}
             />
             <p className="mt-1 text-[12px] text-muted">
-              On rejection this is shown to the member.
+              Saved in the verification log and shown to the member.
             </p>
             <div className="mt-3 flex gap-2">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void decide("approve")}
-                className="cursor-pointer rounded-lg bg-accent px-4 py-2.5 text-[13px] font-semibold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Approve
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void decide("reject")}
-                className="cursor-pointer rounded-lg border border-line px-4 py-2.5 text-[13px] font-semibold text-ink transition hover:border-ink disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Reject
-              </button>
+              {request.status === "PENDING" ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void act(STAFF_ENDPOINTS.approve(request.id))}
+                    className={PRIMARY_BUTTON}
+                  >
+                    Verify
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void act(STAFF_ENDPOINTS.reject(request.id))}
+                    className={SECONDARY_BUTTON}
+                  >
+                    Reject
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    if (window.confirm(`Revoke the business badge for ${request.businessName}? Their directory listing will be taken down.`)) {
+                      void act(STAFF_ENDPOINTS.revokeBusiness(request.userId));
+                    }
+                  }}
+                  className={SECONDARY_BUTTON}
+                >
+                  Revoke business badge
+                </button>
+              )}
             </div>
           </div>
-        )
-      ) : (
-        <p className="mt-4 border-t border-line pt-3 text-[13px] text-muted">
-          {request.status === "APPROVED" ? "Approved" : "Rejected"}
-          {request.reviewedAt ? ` on ${formatDate(request.reviewedAt)}` : ""}
-          {request.reviewNote ? ` — ${request.reviewNote}` : ""}
+        ))}
+    </article>
+  );
+}
+
+/** "Verified by X on … — note", then "Revoked by Y on … — note" when relevant. */
+function DecisionTrail({ request }: { request: BadgeRequest }) {
+  const decided = request.status === "REJECTED" ? "Rejected" : "Verified";
+  return (
+    <div className="mt-4 flex flex-col gap-1 border-t border-line pt-3 text-[13px] text-muted">
+      <p>
+        {decided}
+        {request.reviewedBy && (
+          <>
+            {" by "}
+            <MemberLink user={request.reviewedBy} />
+          </>
+        )}
+        {request.reviewedAt ? ` on ${formatDate(request.reviewedAt)}` : ""}
+        {request.reviewNote ? ` — “${request.reviewNote}”` : ""}
+      </p>
+      {request.status === "REVOKED" && (
+        <p>
+          Revoked
+          {request.revokedBy && (
+            <>
+              {" by "}
+              <MemberLink user={request.revokedBy} />
+            </>
+          )}
+          {request.revokedAt ? ` on ${formatDate(request.revokedAt)}` : ""}
+          {request.revokeNote ? ` — “${request.revokeNote}”` : ""}
         </p>
       )}
-    </article>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Verification log
+// ---------------------------------------------------------------------------
+
+const DECISION_STYLES: Record<Exclude<BadgeRequestStatus, "PENDING">, [string, string]> = {
+  APPROVED: ["Verified", "bg-fun-soft text-fun"],
+  REJECTED: ["Rejected", "bg-accent-soft text-accent"],
+  REVOKED: ["Revoked", "bg-paper text-muted"],
+};
+
+function VerificationLog() {
+  const [pageNo, setPageNo] = useState(0);
+  const { page, error } = usePage<BadgeRequest>(STAFF_ENDPOINTS.badgeLog(pageNo), 0);
+
+  if (error) return <Note>{error}</Note>;
+  if (!page) return <Note>Loading…</Note>;
+  if (page.content.length === 0) return <Note>No businesses have been verified or rejected yet.</Note>;
+
+  return (
+    <section>
+      <p className="mb-4 text-[13px] text-muted">
+        Every decision on a business, newest first — who was verified, and by whom.
+      </p>
+      <Table head={["When", "Business", "Member", "Decision", "By", "Note"]} minWidth={760}>
+        {page.content.map((r) => {
+          const [label, cls] = DECISION_STYLES[r.status as Exclude<BadgeRequestStatus, "PENDING">];
+          const revoked = r.status === "REVOKED";
+          return (
+            <tr key={r.id} className="border-b border-line align-top last:border-0">
+              <td className="whitespace-nowrap px-4 py-3 text-muted">
+                {formatDate(revoked ? r.revokedAt : r.reviewedAt)}
+              </td>
+              <td className="px-4 py-3">
+                <div className="font-semibold">{r.businessName}</div>
+                <div className="text-[12px] text-muted">{businessTypeLabel(r)}</div>
+              </td>
+              <td className="px-4 py-3">
+                <MemberLink user={r.user} />
+              </td>
+              <td className="px-4 py-3">
+                <span className={`rounded-full px-2.5 py-[3px] text-[11px] font-semibold ${cls}`}>
+                  {label}
+                </span>
+              </td>
+              <td className="px-4 py-3">
+                {revoked ? (
+                  <>
+                    <MemberLink user={r.revokedBy} />
+                    <div className="text-[12px] text-muted">
+                      verified by {r.reviewedBy?.username ?? "—"}
+                    </div>
+                  </>
+                ) : (
+                  <MemberLink user={r.reviewedBy} />
+                )}
+              </td>
+              <td className="px-4 py-3 text-muted">
+                {(revoked ? r.revokeNote : r.reviewNote) || "—"}
+              </td>
+            </tr>
+          );
+        })}
+      </Table>
+      <Pager page={page} onPage={setPageNo} />
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Directory listings
+// ---------------------------------------------------------------------------
+
+function ListingsReview() {
+  const [approved, setApproved] = useState(false);
+  const [pageNo, setPageNo] = useState(0);
+  const [reload, setReload] = useState(0);
+  const { page, error } = usePage<Shop>(STAFF_ENDPOINTS.shops(approved, pageNo), reload);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  async function setApproval(shop: Shop, next: boolean) {
+    setActionError(null);
+    setBusy(shop.id);
+    try {
+      await api.put(STAFF_ENDPOINTS.approveShop(shop.id, next));
+      setReload((n) => n + 1);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Could not update the listing.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function show(next: boolean) {
+    setPageNo(0);
+    setApproved(next);
+  }
+
+  return (
+    <section>
+      <div className="mb-4 flex flex-wrap gap-2">
+        <TabButton small active={!approved} onClick={() => show(false)}>
+          Waiting for approval
+        </TabButton>
+        <TabButton small active={approved} onClick={() => show(true)}>
+          Approved
+        </TabButton>
+      </div>
+      {actionError && <ErrorLine>{actionError}</ErrorLine>}
+
+      {error ? (
+        <Note>{error}</Note>
+      ) : !page ? (
+        <Note>Loading…</Note>
+      ) : page.content.length === 0 ? (
+        <Note>{approved ? "No approved listings yet." : "No listings waiting for approval."}</Note>
+      ) : (
+        <>
+          <Table head={["Business", "Owner", "Hours", "Contact", "Where", ""]} minWidth={760}>
+            {page.content.map((s) => (
+              <tr key={s.id} className="border-b border-line align-top last:border-0">
+                <td className="px-4 py-3">
+                  <div className="font-semibold">{s.name}</div>
+                  {!s.active && <div className="text-[12px] text-muted">Hidden by owner</div>}
+                </td>
+                <td className="px-4 py-3">
+                  <MemberLink user={s.owner} />
+                </td>
+                <td className="px-4 py-3 text-muted">{hoursLabel(s)}</td>
+                <td className="px-4 py-3">
+                  {s.phone || "—"}
+                  {s.email && <div className="text-[12px] text-muted">{s.email}</div>}
+                </td>
+                <td className="px-4 py-3 text-muted">{s.address || "—"}</td>
+                <td className="px-4 py-3 text-right">
+                  <button
+                    type="button"
+                    disabled={busy === s.id}
+                    onClick={() => void setApproval(s, !approved)}
+                    className={approved ? SECONDARY_BUTTON : PRIMARY_BUTTON}
+                  >
+                    {approved ? "Hide" : "Approve"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </Table>
+          <Pager page={page} onPage={setPageNo} />
+        </>
+      )}
+    </section>
   );
 }
 
@@ -264,28 +479,7 @@ function RequestCard({
 function TeamList() {
   const [pageNo, setPageNo] = useState(0);
   const [reload, setReload] = useState(0);
-  const [page, setPage] = useState<Page<StaffUser> | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const data = await api.get<Page<StaffUser>>(STAFF_ENDPOINTS.users(pageNo));
-        if (!cancelled) {
-          setPage(data);
-          setError(null);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Could not load members.");
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [pageNo, reload]);
+  const { page, error } = usePage<StaffUser>(STAFF_ENDPOINTS.users(pageNo), reload);
 
   if (error) return <Note>{error}</Note>;
   if (!page) return <Note>Loading…</Note>;
@@ -293,26 +487,15 @@ function TeamList() {
   return (
     <section>
       <p className="mb-4 text-[13px] text-muted">
-        Admins are set in the backend configuration and can&apos;t be changed
-        here. Moderators can verify businesses, ban posters and manage content.
+        Admins are set in the backend configuration — their badges can&apos;t be
+        changed here. Moderators carry the Hub team badge: they can verify
+        businesses, approve listings, ban posters and manage content.
       </p>
-      <div className="overflow-x-auto rounded-card border border-line bg-card">
-        <table className="w-full min-w-[560px] text-left text-[13.5px]">
-          <thead className="border-b border-line text-[12px] uppercase tracking-[0.5px] text-muted">
-            <tr>
-              <th className="px-4 py-3 font-semibold">Member</th>
-              <th className="px-4 py-3 font-semibold">Role</th>
-              <th className="px-4 py-3 font-semibold">Joined</th>
-              <th className="px-4 py-3 font-semibold" />
-            </tr>
-          </thead>
-          <tbody>
-            {page.content.map((u) => (
-              <TeamRow key={u.id} user={u} onChanged={() => setReload((n) => n + 1)} />
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Table head={["Member", "Role", "Joined", ""]} minWidth={640}>
+        {page.content.map((u) => (
+          <TeamRow key={u.id} user={u} onChanged={() => setReload((n) => n + 1)} />
+        ))}
+      </Table>
       <Pager page={page} onPage={setPageNo} />
     </section>
   );
@@ -322,18 +505,34 @@ function TeamRow({ user, onChanged }: { user: StaffUser; onChanged: () => void }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function setRole(role: "MODERATOR" | "USER" | "BUSINESS_OWNER") {
+  async function run(action: () => Promise<unknown>) {
     setError(null);
     setBusy(true);
     try {
-      await api.put(STAFF_ENDPOINTS.role(user.id), { role });
+      await action();
       onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not change the role.");
+      setError(err instanceof Error ? err.message : "Could not make that change.");
     } finally {
       setBusy(false);
     }
   }
+
+  const setRole = (role: "MODERATOR" | "USER" | "BUSINESS_OWNER") =>
+    run(() => api.put(STAFF_ENDPOINTS.role(user.id), { role }));
+
+  function revokeStaff() {
+    if (!window.confirm(`Revoke ${user.username}'s staff badge? They will no longer be a moderator.`)) return;
+    // Back to business owner if their business is confirmed.
+    void setRole(user.badge === "BUSINESS" ? "BUSINESS_OWNER" : "USER");
+  }
+
+  function revokeBusiness() {
+    if (!window.confirm(`Revoke ${user.username}'s business badge? Their directory listing will be taken down.`)) return;
+    void run(() => api.post(STAFF_ENDPOINTS.revokeBusiness(user.id)));
+  }
+
+  const isAdminRow = user.role === "ADMIN";
 
   return (
     <tr className="border-b border-line last:border-0">
@@ -348,28 +547,31 @@ function TeamRow({ user, onChanged }: { user: StaffUser; onChanged: () => void }
         {user.badge === "BUSINESS" && <span className="text-muted"> · business</span>}
       </td>
       <td className="px-4 py-3 text-muted">{formatDate(user.createdAt)}</td>
-      <td className="px-4 py-3 text-right">
-        {user.role === "ADMIN" ? (
-          <span className="text-[12px] text-muted">Set in config</span>
-        ) : user.role === "MODERATOR" ? (
-          <button
-            type="button"
-            disabled={busy}
-            // Back to business owner if their business is confirmed.
-            onClick={() => void setRole(user.badge === "BUSINESS" ? "BUSINESS_OWNER" : "USER")}
-            className="cursor-pointer rounded-lg border border-line px-3 py-1.5 text-[12.5px] font-semibold text-ink transition hover:border-ink disabled:opacity-60"
-          >
-            Remove moderator
-          </button>
+      <td className="px-4 py-3">
+        {isAdminRow ? (
+          <div className="text-right text-[12px] text-muted">Set in config</div>
         ) : (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void setRole("MODERATOR")}
-            className="cursor-pointer rounded-lg bg-accent px-3 py-1.5 text-[12.5px] font-semibold text-white transition hover:opacity-95 disabled:opacity-60"
-          >
-            Make moderator
-          </button>
+          <div className="flex flex-wrap justify-end gap-2">
+            {user.role === "MODERATOR" ? (
+              <button type="button" disabled={busy} onClick={revokeStaff} className={SECONDARY_BUTTON}>
+                Revoke staff badge
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void setRole("MODERATOR")}
+                className="cursor-pointer rounded-lg bg-accent px-3 py-1.5 text-[12.5px] font-semibold text-white transition hover:opacity-95 disabled:opacity-60"
+              >
+                Make moderator
+              </button>
+            )}
+            {user.badge === "BUSINESS" && (
+              <button type="button" disabled={busy} onClick={revokeBusiness} className={SECONDARY_BUTTON}>
+                Revoke business badge
+              </button>
+            )}
+          </div>
         )}
       </td>
     </tr>
@@ -379,6 +581,14 @@ function TeamRow({ user, onChanged }: { user: StaffUser; onChanged: () => void }
 // ---------------------------------------------------------------------------
 // Bits
 // ---------------------------------------------------------------------------
+
+function businessTypeLabel(r: BadgeRequest) {
+  return r.businessType === "FORMAL"
+    ? "Formal"
+    : r.businessType === "INFORMAL"
+      ? "Informal"
+      : "Type not given";
+}
 
 function roleLabel(role: StaffUser["role"]) {
   switch (role) {
@@ -391,84 +601,4 @@ function roleLabel(role: StaffUser["role"]) {
     default:
       return "Member";
   }
-}
-
-function formatDate(iso?: string | null) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-ZA", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function Pager<T>({ page, onPage }: { page: Page<T>; onPage: (n: number) => void }) {
-  if (page.totalPages <= 1) return null;
-  return (
-    <div className="mt-4 flex items-center gap-3 text-[13px]">
-      <button
-        type="button"
-        disabled={page.first}
-        onClick={() => onPage(page.number - 1)}
-        className="cursor-pointer rounded-lg border border-line px-3 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        Previous
-      </button>
-      <span className="text-muted">
-        Page {page.number + 1} of {page.totalPages}
-      </span>
-      <button
-        type="button"
-        disabled={page.last}
-        onClick={() => onPage(page.number + 1)}
-        className="cursor-pointer rounded-lg border border-line px-3 py-1.5 font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        Next
-      </button>
-    </div>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  small,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  small?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`cursor-pointer rounded-full border font-semibold transition ${
-        small ? "px-3 py-1 text-[12.5px]" : "px-4 py-2 text-[13px]"
-      } ${
-        active
-          ? "border-accent bg-accent text-white"
-          : "border-line bg-card text-ink hover:border-ink"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <dt className="text-[11.5px] font-semibold uppercase tracking-[0.5px] text-muted">
-        {label}
-      </dt>
-      <dd className="mt-0.5">{children}</dd>
-    </div>
-  );
-}
-
-function Note({ children }: { children: React.ReactNode }) {
-  return <p className="py-10 text-[14px] text-muted">{children}</p>;
 }

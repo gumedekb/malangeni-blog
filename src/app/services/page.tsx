@@ -1,7 +1,7 @@
 import { Container } from "@/components/layout/Container";
 import { PageHead } from "@/components/ui/PageHead";
-import { ServicesGrid } from "@/components/services/ServicesGrid";
-import { OpeningHours } from "@/components/services/OpeningHours";
+import { CommunityServices } from "@/components/services/CommunityServices";
+import { LibraryInfo } from "@/components/services/LibraryInfo";
 import { SponsorStrip } from "@/components/ui/SponsorStrip";
 
 export default function ServicesPage() {
@@ -10,10 +10,13 @@ export default function ServicesPage() {
       <PageHead
         eyebrow="What we offer"
         title="Services"
-        description="Everything available at Malangeni Library — book a space, get help, or use a facility."
+        description="Local people offering their skills — plumbers, electricians, transport, tutors and more — plus where to find Malangeni Library."
       />
-      <ServicesGrid />
-      <OpeningHours />
+
+      <CommunityServices />
+
+      <LibraryInfo />
+
       <SponsorStrip pitch="Reach people who use the library every day" />
     </Container>
   );

@@ -26,13 +26,31 @@ export const metadata: Metadata = {
   description: "A local community platform for Malangeni — news, places, and services.",
 };
 
+/**
+ * Runs before first paint so the page never flashes the wrong theme: a saved
+ * choice wins, otherwise follow the OS setting. Mirrored in ThemeToggle.
+ */
+const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem("theme");var d=t?t==="dark":matchMedia("(prefers-color-scheme: dark)").matches;document.documentElement.classList.toggle("dark",d)}catch(e){}})()`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${fraunces.variable}`}>
+    // The inline script adds `dark` to the class list before React hydrates.
+    <html
+      lang="en"
+      className={`${inter.variable} ${fraunces.variable}`}
+      suppressHydrationWarning
+    >
+      <head>
+        <script
+          type={typeof window === "undefined" ? "text/javascript" : "text/plain"}
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }}
+        />
+      </head>
       <body className="font-sans leading-normal">
         <AuthProvider>
           <NotificationsProvider>

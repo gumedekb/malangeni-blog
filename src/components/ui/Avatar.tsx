@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import Image from "next/image";
 import { getInitials } from "@/lib/format";
 
@@ -20,10 +23,13 @@ export function Avatar({
   size?: number;
   className?: string;
 }) {
+  // A picture that failed to load (expired Google link, blocked host) drops to
+  // initials instead of leaving a broken-image icon.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const label = name ? getInitials(name) : "You";
   const base = `shrink-0 overflow-hidden rounded-full ${className}`;
 
-  if (src) {
+  if (src && src !== failedSrc) {
     return (
       <Image
         src={src}
@@ -34,6 +40,10 @@ export function Avatar({
         className={`${base} object-cover`}
         style={{ width: size, height: size }}
         unoptimized
+        // Google's photo host often refuses (403) requests that carry another
+        // site's referrer, which is why new accounts showed no picture.
+        referrerPolicy="no-referrer"
+        onError={() => setFailedSrc(src)}
       />
     );
   }
@@ -41,7 +51,7 @@ export function Avatar({
   return (
     <span
       aria-hidden="true"
-      className={`grid place-items-center bg-ink font-semibold text-white ${base}`}
+      className={`grid place-items-center bg-ink font-semibold text-on-ink ${base}`}
       style={{ width: size, height: size, fontSize: Math.round(size * 0.36) }}
     >
       {label}
