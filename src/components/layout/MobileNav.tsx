@@ -5,7 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { NAV_LINKS } from "@/lib/nav";
 import { useAuth } from "@/lib/auth/AuthContext";
-import { getInitials } from "@/lib/format";
+import { canModerate } from "@/lib/auth/types";
+import { Avatar } from "@/components/ui/Avatar";
 
 /**
  * Small-screen navigation: a hamburger trigger (shown below the `md`
@@ -36,7 +37,7 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
 export function MobileNav() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, status, logout } = useAuth();
+  const { firebaseUser, profile, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -61,8 +62,6 @@ export function MobileNav() {
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
-
-  const isAuthed = status === "authenticated" && !!user;
 
   return (
     <div className="relative md:hidden" ref={ref}>
@@ -151,31 +150,53 @@ export function MobileNav() {
             })}
           </nav>
 
+          {profile && canModerate(profile) && (
+            <div className="border-t border-line p-2">
+              <Link
+                href="/staff"
+                role="menuitem"
+                onClick={close}
+                className="block rounded-lg px-3 py-2.5 text-sm font-semibold transition hover:bg-paper"
+              >
+                Hub team tools
+              </Link>
+            </div>
+          )}
+
           <div className="border-t border-line p-2">
-            {isAuthed ? (
+            {profile ? (
               <div className="flex items-center gap-3 px-2 py-1.5">
-                <div className="grid size-9 shrink-0 place-items-center rounded-full bg-ink text-xs font-semibold text-white">
-                  {getInitials(user!.name)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold">
-                    {user!.name}
+                <Link
+                  href="/profile"
+                  role="menuitem"
+                  onClick={close}
+                  className="flex min-w-0 flex-1 items-center gap-3"
+                >
+                  <Avatar
+                    src={profile.avatarUrl ?? firebaseUser?.photoURL}
+                    name={profile.username}
+                    size={36}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold">
+                      {profile.username}
+                    </div>
+                    <div className="truncate text-xs text-muted">
+                      {profile.email}
+                    </div>
                   </div>
-                  <div className="truncate text-xs text-muted">
-                    {user!.email}
-                  </div>
-                </div>
+                </Link>
                 <button
                   type="button"
                   role="menuitem"
                   onClick={() => {
-                    logout();
+                    void signOut();
                     close();
                     router.push("/");
                   }}
                   className="shrink-0 rounded-lg px-2 py-1.5 text-sm font-semibold text-accent transition hover:bg-accent-soft"
                 >
-                  Log out
+                  Sign out
                 </button>
               </div>
             ) : (
@@ -184,17 +205,9 @@ export function MobileNav() {
                   href="/login"
                   role="menuitem"
                   onClick={close}
-                  className="rounded-lg border border-ink px-4 py-2.5 text-center text-sm font-semibold text-ink transition hover:bg-ink hover:text-white"
-                >
-                  Log in
-                </Link>
-                <Link
-                  href="/signup"
-                  role="menuitem"
-                  onClick={close}
                   className="rounded-lg bg-accent px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:opacity-95"
                 >
-                  Create account
+                  Sign in with Google
                 </Link>
               </div>
             )}

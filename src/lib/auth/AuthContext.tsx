@@ -6,160 +6,193 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
-import { apiFetch, AUTH_ENDPOINTS } from "@/lib/api";
-import type {
-  AuthResponse,
-  AuthStatus,
-  LoginInput,
-  SignupInput,
-  User,
-} from "./types";
+import {
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut as firebaseSignOut,
+  type User as FirebaseUser,
+} from "firebase/auth";
+import { auth, googleProvider } from "@/lib/firebase";
+import { api, ApiError, apiFetch, AUTH_ENDPOINTS } from "@/lib/api";
+import { uploadAvatar as sendAvatar } from "@/lib/avatar";
+import { normalizeProfile, type Profile, type UpdateProfileInput } from "./types";
 
-const TOKEN_KEY = "malangeni.token";
-const USER_KEY = "malangeni.user";
+/**
+ * Auth state for the whole app.
+ *
+ * Sign-in happens in the browser against Firebase (Google popup — the only
+ * enabled provider). The backend issues no tokens of its own; it just verifies
+ * the Firebase ID token on each request.
+ *
+ * Two identities are tracked, and they are not interchangeable:
+ *   - `firebaseUser` — the Firebase session. Use it to know *whether* someone
+ *     is signed in.
+ *   - `profile`      — the backend's user record from GET /api/auth/me. Use it
+ *     for anything the backend cares about: `profile.role` to show or hide
+ *     admin UI, `profile.id` for ownership checks. The Firebase uid is not
+ *     exposed by the backend's APIs, so it must never be used for either.
+ *
+ * The backend account is created automatically on the first authenticated
+ * request, so that /me call doubles as registration. There is no sign-up step.
+ */
 
 interface AuthContextValue {
-  user: User | null;
-  token: string | null;
-  status: AuthStatus;
-  login: (input: LoginInput) => Promise<void>;
-  signup: (input: SignupInput) => Promise<void>;
-  logout: () => void;
+  /** The Firebase session, or null when signed out. */
+  firebaseUser: FirebaseUser | null;
+  /** The backend's user record, or null when signed out or /me failed. */
+  profile: Profile | null;
+  /** True until the session is resolved, and while the profile is loading. */
+  loading: boolean;
+  signIn: () => Promise<void>;
+  signOut: () => Promise<void>;
+  /** Set when signed in to Firebase but the backend profile could not be read. */
+  error: string | null;
+  /** Retry the /me call, e.g. after the backend comes back up. */
+  refreshProfile: () => Promise<void>;
+  /** Save changes to the member's own profile and update the app immediately. */
+  updateProfile: (input: UpdateProfileInput) => Promise<Profile>;
+  /** Upload a new profile picture and adopt the returned record immediately. */
+  uploadAvatar: (file: File) => Promise<Profile>;
+  /** Delete the profile picture (file and URL) and adopt the returned record. */
+  removeAvatar: () => Promise<Profile>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function pickToken(data: AuthResponse): string | undefined {
-  return data.token ?? data.accessToken ?? data.jwt;
-}
+/** Popup outcomes that are the user changing their mind, not failures. */
+const CANCELLED_CODES = new Set([
+  "auth/popup-closed-by-user",
+  "auth/cancelled-popup-request",
+  "auth/user-cancelled",
+]);
 
-function pickUser(data: AuthResponse): User | undefined {
-  if (data.user) return data.user;
-  if (data.email) {
-    return {
-      id: data.id,
-      name: data.name ?? data.email,
-      email: data.email,
-      roles: data.roles,
-    };
-  }
-  return undefined;
+function isCancelledPopup(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    CANCELLED_CODES.has((err as { code: string }).code)
+  );
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [status, setStatus] = useState<AuthStatus>("loading");
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const persist = useCallback((nextToken: string, nextUser: User) => {
-    setToken(nextToken);
-    setUser(nextUser);
-    setStatus("authenticated");
+  // Guards against a slow /me response from an earlier session overwriting the
+  // state of a newer one (sign out then straight back in).
+  const requestId = useRef(0);
+
+  const loadProfile = useCallback(async () => {
+    const id = ++requestId.current;
+    setLoading(true);
+    setError(null);
     try {
-      localStorage.setItem(TOKEN_KEY, nextToken);
-      localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
-    } catch {
-      /* storage may be unavailable (private mode) — session-only auth is fine */
+      const me = await apiFetch<Profile>(AUTH_ENDPOINTS.me);
+      if (id !== requestId.current) return;
+      setProfile(normalizeProfile(me));
+    } catch (err) {
+      if (id !== requestId.current) return;
+      setProfile(null);
+      // On 401 apiFetch has already signed the user out; onAuthStateChanged
+      // will fire with null and reset everything, so don't surface an error.
+      if (!(err instanceof ApiError && err.status === 401)) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Could not load your account from the server.",
+        );
+      }
+    } finally {
+      if (id === requestId.current) setLoading(false);
     }
   }, []);
 
-  const logout = useCallback(() => {
-    setToken(null);
-    setUser(null);
-    setStatus("unauthenticated");
-    try {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(USER_KEY);
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  // Hydrate from storage on first load, then revalidate against the backend.
+  // Single source of truth for the session: Firebase tells us, we react.
   useEffect(() => {
-    let cachedToken: string | null = null;
-    let cachedUser: User | null = null;
-    try {
-      cachedToken = localStorage.getItem(TOKEN_KEY);
-      const rawUser = localStorage.getItem(USER_KEY);
-      cachedUser = rawUser ? (JSON.parse(rawUser) as User) : null;
-    } catch {
-      /* ignore */
-    }
-
-    if (!cachedToken) {
-      setStatus("unauthenticated");
-      return;
-    }
-
-    // Show the cached identity immediately to avoid a login flash…
-    setToken(cachedToken);
-    if (cachedUser) setUser(cachedUser);
-    setStatus("authenticated");
-
-    // …then confirm the token is still valid.
-    apiFetch<User>(AUTH_ENDPOINTS.me, { token: cachedToken })
-      .then((fresh) => {
-        setUser(fresh);
-        try {
-          localStorage.setItem(USER_KEY, JSON.stringify(fresh));
-        } catch {
-          /* ignore */
-        }
-      })
-      .catch((err) => {
-        // Only force logout when the server actively rejects the token.
-        if (err && typeof err === "object" && "status" in err) {
-          const status = (err as { status: number }).status;
-          if (status === 401 || status === 403) logout();
-        }
-      });
-  }, [logout]);
-
-  const login = useCallback(
-    async (input: LoginInput) => {
-      const data = await apiFetch<AuthResponse>(AUTH_ENDPOINTS.login, {
-        method: "POST",
-        body: JSON.stringify(input),
-      });
-      const nextToken = pickToken(data);
-      if (!nextToken) throw new Error("The server did not return an auth token.");
-      const nextUser =
-        pickUser(data) ??
-        (await apiFetch<User>(AUTH_ENDPOINTS.me, { token: nextToken }));
-      persist(nextToken, nextUser);
-    },
-    [persist],
-  );
-
-  const signup = useCallback(
-    async (input: SignupInput) => {
-      const data = await apiFetch<AuthResponse>(AUTH_ENDPOINTS.register, {
-        method: "POST",
-        body: JSON.stringify(input),
-      });
-      // Some backends log the user in on register (return a token); others
-      // just create the account. Handle both.
-      const nextToken = pickToken(data);
-      if (nextToken) {
-        const nextUser =
-          pickUser(data) ??
-          (await apiFetch<User>(AUTH_ENDPOINTS.me, { token: nextToken }));
-        persist(nextToken, nextUser);
+    return onAuthStateChanged(auth, (user) => {
+      setFirebaseUser(user);
+      if (!user) {
+        requestId.current++; // discard any /me still in flight
+        setProfile(null);
+        setError(null);
+        setLoading(false);
         return;
       }
-      // No token on register → sign the new user straight in.
-      await login({ usernameOrEmail: input.email, password: input.password });
-    },
-    [persist, login],
-  );
+      void loadProfile();
+    });
+  }, [loadProfile]);
+
+  const signIn = useCallback(async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+      // onAuthStateChanged takes it from here and loads the profile.
+    } catch (err) {
+      if (isCancelledPopup(err)) return;
+      throw err;
+    }
+  }, []);
+
+  const signOut = useCallback(async () => {
+    await firebaseSignOut(auth);
+  }, []);
+
+  const updateProfile = useCallback(async (input: UpdateProfileInput) => {
+    const updated = await api.patch<Profile>(AUTH_ENDPOINTS.me, input);
+    // Adopt the server's version rather than the optimistic one — it decides
+    // the final username (trimming, case) and is the source of truth.
+    const normalized = normalizeProfile(updated);
+    setProfile(normalized);
+    return normalized;
+  }, []);
+
+  const uploadAvatar = useCallback(async (file: File) => {
+    // The backend stores the image and returns the updated record, so a single
+    // call both uploads and persists — no follow-up PATCH needed.
+    const updated = await sendAvatar(file);
+    setProfile(updated);
+    return updated;
+  }, []);
+
+  const removeAvatar = useCallback(async () => {
+    const updated = normalizeProfile(
+      await api.del<Profile>(AUTH_ENDPOINTS.avatar),
+    );
+    setProfile(updated);
+    return updated;
+  }, []);
 
   const value = useMemo(
-    () => ({ user, token, status, login, signup, logout }),
-    [user, token, status, login, signup, logout],
+    () => ({
+      firebaseUser,
+      profile,
+      loading,
+      signIn,
+      signOut,
+      error,
+      refreshProfile: loadProfile,
+      updateProfile,
+      uploadAvatar,
+      removeAvatar,
+    }),
+    [
+      firebaseUser,
+      profile,
+      loading,
+      signIn,
+      signOut,
+      error,
+      loadProfile,
+      updateProfile,
+      uploadAvatar,
+      removeAvatar,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

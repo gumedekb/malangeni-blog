@@ -4,6 +4,7 @@ import "./globals.css";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { AuthProvider } from "@/lib/auth/AuthContext";
+import { OnboardingGate } from "@/components/auth/OnboardingGate";
 import { NotificationsProvider } from "@/lib/notifications/NotificationsContext";
 
 const inter = Inter({
@@ -35,6 +36,7 @@ export default function RootLayout({
       <body className="font-sans leading-normal">
         <AuthProvider>
           <NotificationsProvider>
+            <OnboardingGate />
             <Header />
             {children}
             <Footer />

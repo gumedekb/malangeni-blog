@@ -4,10 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/AuthContext";
-import { getInitials } from "@/lib/format";
+import { canModerate } from "@/lib/auth/types";
+import { Avatar } from "@/components/ui/Avatar";
 
 export function UserMenu() {
-  const { user, status, logout } = useAuth();
+  const { firebaseUser, profile, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -27,8 +28,7 @@ export function UserMenu() {
     };
   }, [open]);
 
-  const isAuthed = status === "authenticated" && !!user;
-  const label = isAuthed ? getInitials(user!.name) : "You";
+  const picture = profile?.avatarUrl ?? firebaseUser?.photoURL ?? null;
 
   return (
     <div className="relative" ref={ref}>
@@ -38,9 +38,9 @@ export function UserMenu() {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Account menu"
-        className="grid size-[30px] cursor-pointer place-items-center rounded-full bg-ink text-[11px] font-semibold text-white transition hover:opacity-90"
+        className="cursor-pointer rounded-full transition hover:opacity-90"
       >
-        {label}
+        <Avatar src={picture} name={profile?.username} size={30} />
       </button>
 
       {open && (
@@ -48,28 +48,45 @@ export function UserMenu() {
           role="menu"
           className="absolute right-0 top-[calc(100%+10px)] z-30 w-56 overflow-hidden rounded-xl border border-line bg-card shadow-[0_12px_32px_rgba(0,0,0,0.12)]"
         >
-          {isAuthed ? (
+          {profile ? (
             <>
               <div className="border-b border-line px-4 py-3">
-                <div className="truncate text-sm font-semibold">
-                  {user!.name}
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-sm font-semibold">
+                    {profile.username}
+                  </span>
+                  {canModerate(profile) && (
+                    <span className="shrink-0 rounded-full bg-[#f6efe2] px-2 py-[2px] text-[10px] font-semibold uppercase tracking-[0.5px] text-gold">
+                      {profile.role}
+                    </span>
+                  )}
                 </div>
-                <div className="truncate text-xs text-muted">{user!.email}</div>
+                <div className="truncate text-xs text-muted">
+                  {profile.email}
+                </div>
               </div>
+              <MenuLink href="/profile" onClick={() => setOpen(false)}>
+                Your profile
+              </MenuLink>
               <MenuLink href="/community" onClick={() => setOpen(false)}>
                 My community
               </MenuLink>
+              {canModerate(profile) && (
+                <MenuLink href="/staff" onClick={() => setOpen(false)}>
+                  Hub team tools
+                </MenuLink>
+              )}
               <button
                 type="button"
                 role="menuitem"
                 onClick={() => {
-                  logout();
+                  void signOut();
                   setOpen(false);
                   router.push("/");
                 }}
                 className="block w-full cursor-pointer px-4 py-2.5 text-left text-sm text-accent transition hover:bg-accent-soft"
               >
-                Log out
+                Sign out
               </button>
             </>
           ) : (
@@ -80,15 +97,12 @@ export function UserMenu() {
                   Sign in to post, join groups and book services.
                 </div>
               </div>
-              <MenuLink href="/login" onClick={() => setOpen(false)}>
-                Log in
-              </MenuLink>
               <MenuLink
-                href="/signup"
+                href="/login"
                 onClick={() => setOpen(false)}
                 className="text-accent"
               >
-                Create an account
+                Sign in with Google
               </MenuLink>
             </>
           )}

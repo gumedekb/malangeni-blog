@@ -68,6 +68,44 @@ export interface Thread {
   replies: number;
 }
 
+/**
+ * A post as the backend returns it from `/api/posts` — distinct from the
+ * mock-data `FeedPost` / `Thread` shapes above, which the components still use
+ * until the feed is wired to the real API.
+ */
+export interface ApiPost {
+  id: string;
+  authorId: string;
+  author: {
+    id: string;
+    username: string;
+    avatarUrl?: string | null;
+    role?: string;
+    badge?: string | null;
+  };
+  type: "COMMUNITY" | "NEWS" | "NOTICE" | "JOB" | "INFORMATIONAL";
+  title: string;
+  body: string;
+  imageUrl?: string | null;
+  groupId?: string | null;
+  createdAt: string;
+  likeCount: number;
+  commentCount: number;
+  likedByCurrentUser?: boolean;
+}
+
+/** Spring's `Page<T>` envelope. */
+export interface Page<T> {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
+  last: boolean;
+  first: boolean;
+  empty: boolean;
+}
+
 export interface Group {
   id: string;
   icon: string;

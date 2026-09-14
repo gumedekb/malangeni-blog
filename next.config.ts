@@ -1,29 +1,26 @@
 import type { NextConfig } from "next";
 
 /**
- * Same-origin API proxy.
+ * No API proxy.
  *
- * The browser calls `/api/*` on this dev server, and Next forwards those
- * requests to the Spring backend. This means:
- *   - the browser never has to reach the backend host directly (handy when
- *     the backend runs on the Windows host and the app runs under WSL, where
- *     `localhost:8080` doesn't cross the boundary), and
- *   - there's no CORS, because from the browser it's all one origin.
+ * The browser now calls the backend directly at NEXT_PUBLIC_API_BASE_URL and
+ * authenticates with a Firebase ID token, so requests must cross origins and
+ * the backend's CORS config has to allow this app's origin
+ * (http://localhost:3000 in development).
  *
- * BACKEND_ORIGIN is a SERVER-side var (no NEXT_PUBLIC_ prefix): it only needs
- * to be reachable from wherever `next dev` runs. Under WSL that's the Windows
- * host IP (e.g. http://172.22.224.1:8080), not localhost.
+ * The old `/api/*` rewrite is gone deliberately: it routed requests through the
+ * Next server, which breaks when the app is served from WSL while the backend
+ * runs on the Windows host.
  */
-const backendOrigin = process.env.BACKEND_ORIGIN ?? "http://localhost:8080";
-
 const nextConfig: NextConfig = {
-  async rewrites() {
-    return [
-      {
-        source: "/api/:path*",
-        destination: `${backendOrigin}/api/:path*`,
-      },
-    ];
+  images: {
+    // Avatars come from two places: the Google photo attached to the sign-in,
+    // and custom uploads in Firebase Storage.
+    remotePatterns: [
+      { protocol: "https", hostname: "lh3.googleusercontent.com" },
+      { protocol: "https", hostname: "firebasestorage.googleapis.com" },
+      { protocol: "https", hostname: "*.firebasestorage.app" },
+    ],
   },
 };
 

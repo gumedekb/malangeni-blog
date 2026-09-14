@@ -1,10 +1,10 @@
 import { Container } from "@/components/layout/Container";
-import { AuthForm } from "@/components/auth/AuthForm";
+import { SignInPanel } from "@/components/auth/SignInPanel";
 
 export default function LoginPage() {
   return (
     <Container as="main">
-      <AuthForm mode="login" />
+      <SignInPanel />
     </Container>
   );
 }

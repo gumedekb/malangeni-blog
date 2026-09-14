@@ -8,17 +8,17 @@ import { useAuth } from "@/lib/auth/AuthContext";
 import { getInitials } from "@/lib/format";
 
 export function Discussions() {
-  const { user } = useAuth();
+  const { profile } = useAuth();
   const router = useRouter();
   const [threads, setThreads] = useState<Thread[]>(THREADS);
   const [draft, setDraft] = useState("");
   const [liked, setLiked] = useState<Record<string, boolean>>({});
 
-  const myInitials = user ? getInitials(user.name) : "You";
+  const myInitials = profile ? getInitials(profile.username) : "You";
 
   const post = () => {
     // Posting identifies the current user — require sign-in.
-    if (!user) {
+    if (!profile) {
       router.push("/login");
       return;
     }
@@ -26,7 +26,7 @@ export function Discussions() {
     if (!title) return;
     const newThread: Thread = {
       id: `local-${Date.now()}`,
-      authorName: user.name,
+      authorName: profile.username,
       authorInitials: myInitials,
       avatarColor: "#b8842b",
       timeAgo: "Just now",
@@ -55,16 +55,16 @@ export function Discussions() {
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && post()}
           placeholder={
-            user
+            profile
               ? "Share something with the community…"
-              : "Log in to share something with the community…"
+              : "Sign in to share something with the community…"
           }
           className="flex-1 rounded-3xl border border-line bg-paper px-4 py-2.5 text-sm outline-none focus:border-accent"
         />
         <button
           type="button"
           onClick={post}
-          disabled={!!user && !draft.trim()}
+          disabled={!!profile && !draft.trim()}
           className="cursor-pointer rounded-3xl bg-accent px-[18px] py-2.5 text-[13px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
         >
           Post
