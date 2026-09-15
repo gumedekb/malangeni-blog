@@ -1,67 +1,52 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { api, POST_ENDPOINTS } from "@/lib/api";
-import { toFeedPost } from "@/lib/posts";
-import type { ApiPost, FeedPost, FeedType, Page } from "@/lib/types";
+import { useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { fitImage } from "@/lib/cloudinary";
+import { postPath } from "@/lib/posts";
+import { usePostFeed } from "@/lib/usePostFeed";
+import type { ApiPost, PostType } from "@/lib/types";
+import { Byline } from "@/components/posts/Byline";
+import { FeedNote } from "@/components/posts/FeedNote";
+import { LoadMore } from "@/components/posts/LoadMore";
+import { PostActions, TypeTag } from "@/components/posts/PostCard";
+import { SponsorCard } from "@/components/ui/SponsorCard";
 
-type Filter = "all" | FeedType;
+type Filter = "all" | "discussion" | "news" | "notice" | "job";
 
-const FILTERS: { id: Filter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "news", label: "News" },
-  { id: "notice", label: "Notices" },
-  { id: "job", label: "Jobs" },
+/** Every kind of post; no types means all of them. */
+const FILTERS: { id: Filter; label: string; empty: string; types: PostType[] }[] = [
+  { id: "all", label: "All", empty: "Nothing has been posted yet.", types: [] },
+  { id: "discussion", label: "Discussions", empty: "No discussions yet.", types: ["COMMUNITY"] },
+  { id: "news", label: "News", empty: "No news yet.", types: ["NEWS"] },
+  { id: "notice", label: "Notices", empty: "No notices yet.", types: ["NOTICE"] },
+  { id: "job", label: "Jobs", empty: "No jobs posted yet.", types: ["JOB"] },
 ];
 
+/**
+ * The home page's masonry feed. Cards take the shape of their post: a picture
+ * is always shown whole (never cropped), capped in height, and text-only posts
+ * are just as tall as their words.
+ */
 export function CommunityFeed() {
   const [filter, setFilter] = useState<Filter>("all");
-  const [liked, setLiked] = useState<Record<string, boolean>>({});
-
-  // News, Notice and Job posts from the backend (discussions stay on the Community page).
-  const [realPosts, setRealPosts] = useState<FeedPost[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const page = await api.get<Page<ApiPost>>(POST_ENDPOINTS.list(30));
-        if (cancelled) return;
-        setRealPosts(
-          (page?.content ?? [])
-            .map(toFeedPost)
-            .filter((p): p is FeedPost => p !== null),
-        );
-      } catch {
-        /* the mock feed still shows */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const posts = useMemo(() => {
-    return filter === "all" ? realPosts : realPosts.filter((post) => post.type === filter);
-  }, [filter, realPosts]);
-
-  const toggleLike = (id: string) =>
-    setLiked((prev) => ({ ...prev, [id]: !prev[id] }));
+  const active = FILTERS.find((f) => f.id === filter) ?? FILTERS[0];
+  const feed = usePostFeed({ types: active.types }, { size: 9 });
 
   return (
     <>
-      <div className="mb-4 mt-[34px] flex items-baseline justify-between">
+      <div className="mb-4 mt-[34px] flex flex-wrap items-baseline justify-between gap-3">
         <h3 className="font-serif text-2xl font-semibold">Community feed</h3>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {FILTERS.map((f) => (
             <button
               key={f.id}
               type="button"
               onClick={() => setFilter(f.id)}
+              aria-pressed={filter === f.id}
               className={`cursor-pointer rounded-full border px-3.5 py-1.5 text-[13px] transition ${
-                filter === f.id
-                  ? "border-ink bg-ink text-on-ink"
-                  : "border-line bg-card text-muted hover:text-ink"
+                filter === f.id ? "border-ink bg-ink text-on-ink" : "border-line bg-card text-muted hover:text-ink"
               }`}
             >
               {f.label}
@@ -70,91 +55,71 @@ export function CommunityFeed() {
         </div>
       </div>
 
-      <section className="gap-5 [column-gap:20px] sm:columns-2 md:columns-3">
-        {posts.map((post) => (
-          <PostCard
-            key={post.id}
-            post={post}
-            liked={!!liked[post.id]}
-            onLike={() => toggleLike(post.id)}
-          />
-        ))}
-
-        {filter === "all" && (
-          <article className="mb-5 break-inside-avoid overflow-hidden rounded-xl border border-dashed border-accent bg-accent-soft">
-            <div className="px-4 py-6 text-center">
-              <div className="text-[10px] font-semibold uppercase tracking-[1.5px] text-accent">
-                Sponsored
-              </div>
-              <h4 className="mb-1 mt-2 font-serif text-lg font-semibold">
-                Local Spaza &amp; Co.
-              </h4>
-              <p className="text-[13.5px] text-muted">
-                Support the businesses that keep Malangeni running.
-              </p>
-            </div>
-          </article>
-        )}
-      </section>
+      {feed.loading ? (
+        <FeedNote>Loading…</FeedNote>
+      ) : feed.error && feed.posts.length === 0 ? (
+        <FeedNote tone="error" onRetry={feed.reload}>
+          {feed.error}
+        </FeedNote>
+      ) : feed.posts.length === 0 ? (
+        <FeedNote tone="empty">
+          {active.empty}{" "}
+          <Link href="/community/new" className="font-semibold text-accent">
+            Share something
+          </Link>
+        </FeedNote>
+      ) : (
+        <section className="gap-5 [column-gap:20px] sm:columns-2 md:columns-3">
+          {feed.posts.map((post) => (
+            <FeedCard key={post.id} post={post} onChange={feed.update} />
+          ))}
+          {filter === "all" && <SponsorCard placement="FEED" className="mb-5 break-inside-avoid" />}
+        </section>
+      )}
+      <LoadMore hasMore={feed.hasMore} loading={feed.loadingMore} onLoadMore={feed.loadMore} />
     </>
   );
 }
 
-function PostCard({
-  post,
-  liked,
-  onLike,
-}: {
-  post: FeedPost;
-  liked: boolean;
-  onLike: () => void;
-}) {
-  const likeCount = post.likes + (liked ? 1 : 0);
+function FeedCard({ post, onChange }: { post: ApiPost; onChange: (post: ApiPost) => void }) {
+  const href = postPath(post.id);
   return (
     <article
-      className={`mb-5 break-inside-avoid overflow-hidden rounded-xl border border-line transition hover:-translate-y-0.5 hover:shadow-[0_6px_22px_rgba(0,0,0,0.07)] ${
-        post.image
-          ? "bg-card"
-          : "bg-[linear-gradient(150deg,var(--color-card),var(--color-paper-warm))]"
+      className={`mb-5 break-inside-avoid rounded-xl border border-line transition hover:shadow-[0_6px_22px_rgba(0,0,0,0.07)] ${
+        post.imageUrl ? "bg-card" : "bg-[linear-gradient(150deg,var(--color-card),var(--color-paper-warm))]"
       }`}
     >
-      {post.image && (
-        <div
-          className={`bg-cover bg-center ${post.tall ? "h-[260px]" : "h-[170px]"}`}
-          style={{ backgroundImage: `url('${post.image}')` }}
-        />
+      {post.imageUrl && (
+        <Link
+          href={href}
+          tabIndex={-1}
+          aria-hidden="true"
+          className="flex justify-center overflow-hidden rounded-t-xl border-b border-line bg-paper"
+        >
+          <Image
+            src={fitImage(post.imageUrl, 900)}
+            alt=""
+            width={900}
+            height={600}
+            unoptimized
+            className="h-auto max-h-[420px] w-auto max-w-full"
+          />
+        </Link>
       )}
       <div className="p-4">
-        <div className="mb-2 flex items-center gap-2 text-xs text-muted">
-          <span className="grid size-[22px] place-items-center rounded-full bg-gold text-[10px] font-semibold text-white">
-            {post.authorInitials}
+        <div className="mb-2.5 flex items-start gap-2">
+          <Byline user={post.author} createdAt={post.createdAt} size={28} />
+          <span className="ml-auto shrink-0">
+            <TypeTag type={post.type} />
           </span>
-          <span className="truncate">
-            {post.authorName} · {post.timeAgo}
-          </span>
-          {post.type === "job" && (
-            <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-tag px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.5px] text-gold">
-              💼 Job
-            </span>
-          )}
         </div>
-        <h4
-          className={`mb-1.5 font-serif font-semibold ${post.image ? "text-lg" : "text-xl"}`}
-        >
-          {post.title}
+        <h4 className={`mb-1.5 font-serif font-semibold ${post.imageUrl ? "text-lg" : "text-xl"}`}>
+          <Link href={href} className="hover:underline">
+            {post.title}
+          </Link>
         </h4>
-        <p className="text-[13.5px] text-muted">{post.body}</p>
-        <div className="mt-3 flex gap-4 text-xs text-muted">
-          <button
-            type="button"
-            onClick={onLike}
-            className={`cursor-pointer ${liked ? "text-accent" : "text-muted"}`}
-            aria-pressed={liked}
-          >
-            {liked ? "♥" : "♡"} {likeCount}
-          </button>
-          <span>💬 {post.comments}</span>
-        </div>
+        {post.body && <p className="line-clamp-4 whitespace-pre-line text-[13.5px] text-muted">{post.body}</p>}
+        <PostActions post={post} onChange={onChange} commentsHref={`${href}#comments`} />
       </div>
     </article>
   );

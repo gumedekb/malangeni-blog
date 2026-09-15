@@ -1,6 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
+import { fillImage } from "@/lib/cloudinary";
 import { categoryInfo } from "@/lib/services";
+import { nameOf, profileHref } from "@/lib/users";
 import type { ApiService } from "@/lib/types";
 import { UserBadges } from "@/components/ui/UserBadges";
 
@@ -10,13 +12,15 @@ export function ServiceListingCard({ service }: { service: ApiService }) {
   return (
     <article className="flex flex-col overflow-hidden rounded-xl border border-line bg-card transition hover:-translate-y-0.5 hover:shadow-[0_6px_22px_rgba(0,0,0,0.07)]">
       {service.imageUrl && (
+        // Cloudinary crops to the card's exact shape and keeps the subject (g_auto), so the
+        // browser shows it as-is instead of cutting it again.
         <Image
-          src={service.imageUrl}
+          src={fillImage(service.imageUrl, 800, 450)}
           alt=""
           width={800}
           height={450}
           unoptimized
-          className="h-[160px] w-full object-cover"
+          className="aspect-video h-auto w-full object-cover"
         />
       )}
       <div className="flex flex-1 flex-col p-[22px]">
@@ -52,10 +56,10 @@ export function ServiceListingCard({ service }: { service: ApiService }) {
               <span>
                 By{" "}
                 <Link
-                  href={`/u/${encodeURIComponent(service.provider.username)}`}
+                  href={profileHref(service.provider.username)}
                   className="font-semibold text-ink hover:underline"
                 >
-                  {service.provider.username}
+                  {nameOf(service.provider)}
                 </Link>
               </span>
               <UserBadges role={service.provider.role} badge={service.provider.badge} />

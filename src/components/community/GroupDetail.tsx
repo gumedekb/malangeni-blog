@@ -2,15 +2,19 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { api, ApiError, COMMUNITY_ENDPOINTS } from "@/lib/api";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { canModerate } from "@/lib/auth/types";
+import { usePostFeed } from "@/lib/usePostFeed";
+import { loginHref, nameOf, profileHref } from "@/lib/users";
+import type { ApiGroup, GroupMembership } from "@/lib/types";
 import { GroupForm } from "@/components/staff/GroupForm";
-import type { ApiGroup, ApiPost, GroupMembership, Page } from "@/lib/types";
 import { Avatar } from "@/components/ui/Avatar";
 import { UserBadges } from "@/components/ui/UserBadges";
-import { PostCard } from "@/components/profile/PostCard";
+import { FeedNote } from "@/components/posts/FeedNote";
+import { LoadMore } from "@/components/posts/LoadMore";
+import { PostCard } from "@/components/posts/PostCard";
 
 /**
  * A group's page: what it is, who's in it, and what's been posted to it.
@@ -18,15 +22,17 @@ import { PostCard } from "@/components/profile/PostCard";
 export function GroupDetail({ id }: { id: string }) {
   const { firebaseUser, profile } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const viewerId = profile ? String(profile.id) : null;
 
   const [group, setGroup] = useState<ApiGroup | null>(null);
-  const [members, setMembers] = useState<GroupMembership[]>([]);
-  const [posts, setPosts] = useState<ApiPost[]>([]);
+  const [members, setMembers] = useState<GroupMembership[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [staffError, setStaffError] = useState<string | null>(null);
+
+  const feed = usePostFeed({ groupId: id });
 
   // Admins and moderators manage groups; everyone else only joins and reads.
   const staff = canModerate(profile);
@@ -38,14 +44,8 @@ export function GroupDetail({ id }: { id: string }) {
         const g = await api.get<ApiGroup>(COMMUNITY_ENDPOINTS.group(id));
         if (cancelled) return;
         setGroup(g);
-        const [m, p] = await Promise.all([
-          api.get<GroupMembership[]>(COMMUNITY_ENDPOINTS.members(id)).catch(() => []),
-          api.get<Page<ApiPost>>(COMMUNITY_ENDPOINTS.groupPosts(id)).catch(() => null),
-        ]);
-        if (cancelled) return;
-        setMembers(m ?? []);
-        // Filter again in case the backend ignored the groupId parameter.
-        setPosts((p?.content ?? []).filter((post) => String(post.groupId) === id));
+        const m = await api.get<GroupMembership[]>(COMMUNITY_ENDPOINTS.members(id)).catch(() => []);
+        if (!cancelled) setMembers(m ?? []);
       } catch (err) {
         if (cancelled) return;
         setError(
@@ -65,7 +65,7 @@ export function GroupDetail({ id }: { id: string }) {
   async function toggle() {
     if (!group) return;
     if (!firebaseUser) {
-      router.push("/login");
+      router.push(loginHref(pathname));
       return;
     }
     const joining = !group.joinedByCurrentUser;
@@ -119,6 +119,12 @@ export function GroupDetail({ id }: { id: string }) {
         description={group.description}
         action={
           <div className="flex flex-wrap gap-2">
+            <Link
+              href={`/community/new?group=${encodeURIComponent(id)}`}
+              className="rounded-full bg-accent px-4 py-2 text-[13px] font-semibold text-white transition hover:opacity-95"
+            >
+              Create post
+            </Link>
             <button
               type="button"
               disabled={busy}
@@ -175,37 +181,44 @@ export function GroupDetail({ id }: { id: string }) {
       <div className="mt-6 grid grid-cols-1 items-start gap-6 md:grid-cols-[1fr_280px]">
         <section>
           <h3 className="font-serif text-[20px] font-semibold">Posts</h3>
-          {posts.length === 0 ? (
-            <p className="mt-3 rounded-card border border-line bg-card p-6 text-[14px] text-muted">
-              Nothing has been posted to this group yet.
-            </p>
-          ) : (
-            <div className="mt-3 flex flex-col gap-4">
-              {posts.map((post) => (
-                <PostCard key={post.id} post={post} />
-              ))}
-            </div>
-          )}
+          <div className="mt-3 flex flex-col gap-4">
+            {feed.loading ? (
+              <FeedNote>Loading…</FeedNote>
+            ) : feed.error && feed.posts.length === 0 ? (
+              <FeedNote tone="error" onRetry={feed.reload}>
+                {feed.error}
+              </FeedNote>
+            ) : feed.posts.length === 0 ? (
+              <FeedNote tone="empty">
+                Nothing has been posted to this group yet —{" "}
+                <Link href={`/community/new?group=${encodeURIComponent(id)}`} className="font-semibold text-accent">
+                  be the first
+                </Link>
+                .
+              </FeedNote>
+            ) : (
+              feed.posts.map((post) => (
+                <PostCard key={post.id} post={post} onChange={feed.update} onDelete={feed.remove} />
+              ))
+            )}
+            <LoadMore hasMore={feed.hasMore} loading={feed.loadingMore} onLoadMore={feed.loadMore} />
+          </div>
         </section>
 
         <aside className="rounded-xl border border-line bg-card p-[18px]">
           <h4 className="mb-3 font-serif text-base font-semibold">Members</h4>
-          {members.length === 0 ? (
+          {members === null ? (
+            <p className="text-[13px] text-muted">Loading…</p>
+          ) : members.length === 0 ? (
             <p className="text-[13px] text-muted">No members yet — be the first.</p>
           ) : (
             <ul className="flex flex-col">
               {members.map((m) => (
-                <li
-                  key={m.id}
-                  className="flex items-center gap-2.5 border-t border-line py-2 first:border-t-0"
-                >
-                  <Avatar src={m.user?.avatarUrl} name={m.user?.username} size={28} />
+                <li key={m.id} className="flex items-center gap-2.5 border-t border-line py-2 first:border-t-0">
+                  <Avatar src={m.user?.avatarUrl} name={nameOf(m.user)} size={28} />
                   {m.user ? (
-                    <Link
-                      href={`/u/${encodeURIComponent(m.user.username)}`}
-                      className="truncate text-sm font-semibold hover:underline"
-                    >
-                      {m.user.username}
+                    <Link href={profileHref(m.user.username)} className="truncate text-sm font-semibold hover:underline">
+                      {nameOf(m.user)}
                     </Link>
                   ) : (
                     <span className="text-sm text-muted">Member</span>
@@ -248,9 +261,7 @@ function Header({
         </div>
         {action}
       </div>
-      {description && (
-        <p className="mt-4 text-[14px] leading-relaxed text-muted">{description}</p>
-      )}
+      {description && <p className="mt-4 text-[14px] leading-relaxed text-muted">{description}</p>}
     </section>
   );
 }

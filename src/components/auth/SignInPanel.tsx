@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { safeNext } from "@/lib/users";
 
 /**
  * The whole sign-in screen. Google is the only provider, and the backend
@@ -17,9 +18,11 @@ export function SignInPanel() {
   const [submitting, setSubmitting] = useState(false);
   const [popupError, setPopupError] = useState<string | null>(null);
 
-  // Fully signed in (Firebase session *and* backend profile) → nothing to do here.
+  // Fully signed in (Firebase session *and* backend profile) → back to where they were headed.
   useEffect(() => {
-    if (firebaseUser && profile) router.replace("/");
+    if (firebaseUser && profile) {
+      router.replace(safeNext(new URLSearchParams(window.location.search).get("next")));
+    }
   }, [firebaseUser, profile, router]);
 
   async function onSignIn() {

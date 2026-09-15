@@ -22,8 +22,15 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
+  // Share previews (Open Graph) need full URLs. Set NEXT_PUBLIC_SITE_URL once deployed.
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
   title: "Malangeni Hub",
   description: "A local community platform for Malangeni — news, places, and services.",
+  openGraph: {
+    siteName: "Malangeni Hub",
+    type: "website",
+    locale: "en_ZA",
+  },
 };
 
 /**

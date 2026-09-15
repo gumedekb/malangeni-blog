@@ -20,6 +20,8 @@
  * live; `next build` bakes it in, so rebuild after changing it.
  */
 
+import type { PostType } from "./types";
+
 /** Backend origin, without a trailing slash. Paths below include `/api`. */
 export const API_BASE_URL = (
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
@@ -83,8 +85,6 @@ export const COMMUNITY_ENDPOINTS = {
   join: (id: string) => `/api/groups/${encodeURIComponent(id)}/join`,
   leave: (id: string) => `/api/groups/${encodeURIComponent(id)}/leave`,
   members: (id: string) => `/api/groups/${encodeURIComponent(id)}/members`,
-  groupPosts: (id: string) =>
-    `/api/posts?groupId=${encodeURIComponent(id)}&size=20&sort=createdAt,desc`,
   upcomingEvents: "/api/events/upcoming?size=50",
   event: (id: string) => `/api/events/${encodeURIComponent(id)}`,
   /** POST: any signed-in member submits an event (starts PENDING). */
@@ -97,7 +97,16 @@ export const COMMUNITY_ENDPOINTS = {
 
 /** Places on Explore (the backend calls them attractions), with average ratings. */
 export const PLACE_ENDPOINTS = {
-  list: "/api/attractions?size=50",
+  /** Public: every place (Explore sorts them by rating). */
+  list: "/api/attractions?size=100",
+  /** Hub team list, alphabetical. */
+  all: "/api/attractions?size=200&sort=name,asc",
+  create: "/api/attractions",
+  place: (id: string) => `/api/attractions/${encodeURIComponent(id)}`,
+  /** Multipart (field `file`) adds or replaces the picture; DELETE removes it. Hub team only. */
+  image: (id: string) => `/api/attractions/${encodeURIComponent(id)}/image`,
+  /** Public list; POST (hub team) adds one. */
+  categories: "/api/categories",
 };
 
 /** Services members offer (plumbing, transport, tutoring…), approved by the hub team. */
@@ -117,15 +126,37 @@ export const SERVICE_ENDPOINTS = {
   needsChanges: (id: string) => `/api/services/${encodeURIComponent(id)}/needs-changes`,
 };
 
+/** Filters for the post feed; all optional, and combined when several are given. */
+export interface PostQuery {
+  /** Any of these types — the home feed asks for news, notices and jobs together. */
+  types?: PostType[];
+  groupId?: string;
+  authorId?: number | string;
+  page?: number;
+  size?: number;
+}
+
 /** Community posts: discussions, news, notices and jobs, optionally tagged to a group. */
 export const POST_ENDPOINTS = {
-  list: (size = 20) => `/api/posts?size=${size}&sort=createdAt,desc`,
+  /** Public, newest first. */
+  list: ({ types, groupId, authorId, page = 0, size = 10 }: PostQuery = {}) => {
+    const query = new URLSearchParams({ page: String(page), size: String(size), sort: "createdAt,desc" });
+    for (const type of types ?? []) query.append("type", type);
+    if (groupId) query.set("groupId", groupId);
+    if (authorId !== undefined && authorId !== null) query.set("authorId", String(authorId));
+    return `/api/posts?${query}`;
+  },
   create: "/api/posts",
   post: (id: string) => `/api/posts/${encodeURIComponent(id)}`,
-  /** POST to like, DELETE to unlike — both idempotent. */
+  /** POST to like, DELETE to unlike — both idempotent, both return the new count. */
   likes: (id: string) => `/api/posts/${encodeURIComponent(id)}/likes`,
   /** Multipart (field `file`): optional picture, author or hub team. */
   image: (id: string) => `/api/posts/${encodeURIComponent(id)}/image`,
+  /** GET (public, oldest first) or POST a comment; a reply sends `parentCommentId`. */
+  comments: (id: string) => `/api/posts/${encodeURIComponent(id)}/comments`,
+  /** DELETE: the comment's author or the hub team. Its replies go with it. */
+  comment: (postId: string, commentId: string) =>
+    `/api/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`,
 };
 
 /** Malangeni Library's details: public GET, hub-team PUT. */
@@ -135,9 +166,18 @@ export const LIBRARY_ENDPOINT = "/api/library";
 export const publicProfilePath = (username: string) =>
   `/api/users/profile/${encodeURIComponent(username)}`;
 
-/** Posts written by one member, newest first. */
-export const authorPostsPath = (authorId: number | string, size = 20) =>
-  `/api/posts?authorId=${encodeURIComponent(String(authorId))}&size=${size}&sort=createdAt,desc`;
+/** Members (signed-in only). */
+export const MEMBER_ENDPOINTS = {
+  /** The newest members, and how many joined this week. */
+  recent: (size = 8) => `/api/users/recent?size=${size}`,
+  /** DELETE: the member's own account and everything they posted. Never an admin. */
+  account: (id: number | string) => `/api/users/${encodeURIComponent(String(id))}`,
+};
+
+/** Paid placements. Public; empty (null here) when nothing is booked for the slot. */
+export const SPONSOR_ENDPOINTS = {
+  active: (placement: string) => `/api/sponsors/active?placement=${encodeURIComponent(placement)}`,
+};
 
 /** Error carrying the HTTP status so callers can branch on 401 vs 403 etc. */
 export class ApiError extends Error {

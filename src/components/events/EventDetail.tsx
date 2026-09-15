@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth/AuthContext";
 import { EVENT_STATUS_LABELS, toCommunityEvent } from "@/lib/events";
 import type { ApiEvent } from "@/lib/types";
 import { EventTag } from "./EventRow";
+import { ShareButton } from "@/components/posts/ShareButton";
 
 /**
  * One event in full. The backend only returns an unapproved event to its
@@ -54,9 +55,12 @@ export function EventDetail({ id }: { id: string }) {
 
   return (
     <div className="w-full max-w-[680px] pb-16">
-      <Link href="/events" className="text-[13px] font-semibold text-accent">
-        ← All events
-      </Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link href="/events" className="text-[13px] font-semibold text-accent">
+          ← All events
+        </Link>
+        <ShareButton path={`/events/${encodeURIComponent(id)}`} title={event.title} className="text-[13px] text-muted" />
+      </div>
 
       {status && status !== "APPROVED" && (
         <p className="mt-4 rounded-lg border border-accent bg-accent-soft px-3.5 py-2.5 text-[13px] text-accent">
@@ -74,7 +78,7 @@ export function EventDetail({ id }: { id: string }) {
             width={1200}
             height={675}
             unoptimized
-            className="h-auto max-h-[420px] w-full object-cover"
+            className="mx-auto block h-auto max-h-[560px] w-auto max-w-full"
           />
         )}
         <div className="flex items-center gap-5 p-6">

@@ -1,12 +1,13 @@
-import type { ApiAttraction, Category, Place } from "./types";
+import type { ApiAttraction, Place } from "./types";
 
-/** A backend attraction in the shape the Explore cards already render. */
+/** A backend attraction in the shape the Explore cards render. */
 export function toPlace(a: ApiAttraction): Place {
   return {
     id: a.id,
     name: a.name,
-    category: (a.category?.name ?? "Learning") as Category,
+    category: a.category?.name ?? "Other",
     image: a.imageUrl ?? "",
+    location: a.location,
     description: a.description ?? undefined,
   };
 }

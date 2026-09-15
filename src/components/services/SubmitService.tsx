@@ -1,25 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useAuth } from "@/lib/auth/AuthContext";
 import type { ApiService } from "@/lib/types";
+import { RequireAuth } from "@/components/auth/RequireAuth";
 import { ServiceForm } from "./ServiceForm";
 
 /** Any signed-in member can list a service; the hub team approves it before it goes public. */
 export function SubmitService() {
-  const { firebaseUser, profile, loading, error: authError } = useAuth();
-  const router = useRouter();
+  return (
+    <RequireAuth>
+      <SubmitServiceForm />
+    </RequireAuth>
+  );
+}
+
+function SubmitServiceForm() {
   const [done, setDone] = useState<{ service: ApiService; warning?: string } | null>(null);
-
-  useEffect(() => {
-    if (!loading && !firebaseUser) router.replace("/login");
-  }, [loading, firebaseUser, router]);
-
-  if (!profile) {
-    return <p className="py-14 text-[14px] text-muted">{authError ?? "Loading…"}</p>;
-  }
 
   if (done) {
     const live = done.service.status === "APPROVED";
@@ -59,9 +56,7 @@ export function SubmitService() {
 
   return (
     <section className="mb-16 max-w-[720px] rounded-card border border-line bg-card p-6">
-      <p className="mb-5 text-[13.5px] text-muted">
-        Services are checked by the hub team before they appear.
-      </p>
+      <p className="mb-5 text-[13.5px] text-muted">Services are checked by the hub team before they appear.</p>
       <ServiceForm onSaved={(service, warning) => setDone({ service, warning })} />
     </section>
   );

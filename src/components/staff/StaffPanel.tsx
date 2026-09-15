@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { api, STAFF_ENDPOINTS } from "@/lib/api";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { RequireAuth } from "@/components/auth/RequireAuth";
 import {
-  canModerate,
   isAdmin,
   type BadgeRequest,
   type BadgeRequestStatus,
@@ -16,6 +15,7 @@ import type { Shop } from "@/lib/types";
 import { EventsAdmin } from "./EventsAdmin";
 import { GroupsAdmin } from "./GroupsAdmin";
 import { LibraryAdmin } from "./LibraryAdmin";
+import { PlacesAdmin } from "./PlacesAdmin";
 import { ServicesAdmin } from "./ServicesAdmin";
 import {
   ErrorLine,
@@ -32,7 +32,7 @@ import {
   usePage,
 } from "./ui";
 
-type Tab = "requests" | "log" | "listings" | "groups" | "events" | "services" | "library" | "team";
+type Tab = "requests" | "log" | "listings" | "groups" | "events" | "services" | "places" | "library" | "team";
 
 /**
  * Hub-team tools:
@@ -47,22 +47,20 @@ type Tab = "requests" | "log" | "listings" | "groups" | "events" | "services" | 
  * Hiding this page is a convenience; the backend enforces every role itself.
  */
 export function StaffPanel() {
-  const { firebaseUser, profile, loading } = useAuth();
-  const router = useRouter();
-  // `/staff#groups` and `/staff#library` (linked from other pages) open straight on that tab.
+  return (
+    <RequireAuth role="staff">
+      <StaffTabs />
+    </RequireAuth>
+  );
+}
+
+function StaffTabs() {
+  const { profile } = useAuth();
+  // `/staff#groups`, `#places` and `#library` (linked from other pages) open straight on that tab.
   const [tab, setTab] = useState<Tab>(() => {
-    const hash = typeof window !== "undefined" ? window.location.hash : "";
-    return hash === "#groups" ? "groups" : hash === "#library" ? "library" : "requests";
+    const hash = typeof window !== "undefined" ? window.location.hash.slice(1) : "";
+    return hash === "groups" || hash === "places" || hash === "library" ? hash : "requests";
   });
-
-  useEffect(() => {
-    if (!loading && !firebaseUser) router.replace("/login");
-  }, [loading, firebaseUser, router]);
-
-  if (loading && !profile) return <Note>Loading…</Note>;
-  if (!profile || !canModerate(profile)) {
-    return <Note>This page is for the hub team.</Note>;
-  }
 
   const tabs: [Tab, string][] = [
     ["requests", "Business verification"],
@@ -71,6 +69,7 @@ export function StaffPanel() {
     ["groups", "Groups"],
     ["events", "Events"],
     ["services", "Services"],
+    ["places", "Places"],
     ["library", "Library"],
   ];
   if (isAdmin(profile)) tabs.push(["team", "Team"]);
@@ -90,6 +89,7 @@ export function StaffPanel() {
       {tab === "groups" && <GroupsAdmin />}
       {tab === "events" && <EventsAdmin />}
       {tab === "services" && <ServicesAdmin />}
+      {tab === "places" && <PlacesAdmin />}
       {tab === "library" && <LibraryAdmin />}
       {tab === "team" && isAdmin(profile) && <TeamList />}
     </div>

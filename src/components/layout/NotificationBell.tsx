@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { NOTIFICATION_CATEGORIES } from "@/lib/data";
+import { NOTIFICATION_CATEGORIES } from "@/lib/notifications/categories";
 import { useNotifications } from "@/lib/notifications/NotificationsContext";
 import type { AppNotification, NotificationCategory } from "@/lib/types";
 
@@ -48,9 +48,10 @@ export function NotificationBell() {
   }, [open]);
 
   // Always reopen on the inbox tab.
-  useEffect(() => {
+  const toggleOpen = () => {
     if (!open) setView("inbox");
-  }, [open]);
+    setOpen(!open);
+  };
 
   const badge = unreadCount > 9 ? "9+" : String(unreadCount);
   const anyEnabled = useMemo(
@@ -68,7 +69,7 @@ export function NotificationBell() {
     <div className="relative" ref={ref}>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggleOpen}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label={

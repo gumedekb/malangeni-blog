@@ -1,19 +1,9 @@
 /**
- * Domain types for the Malangeni Hub frontend.
- *
- * These mirror the entities the Spring Boot backend will expose (see
- * backend-goal.md). The frontend is the spec: every visible piece of data maps
- * to a field here so the mock data in `data.ts` can later be swapped for real
- * API responses without touching the components.
+ * Domain types for the Malangeni Hub frontend: the shapes the Spring Boot
+ * backend returns, plus the display shapes the event rows and place cards use.
  */
 
-export type Category =
-  | "Learning"
-  | "Health"
-  | "Recreation"
-  | "Food"
-  | "Transport";
-
+/** An event in the shape the event rows and detail page render. */
 export interface CommunityEvent {
   id: string;
   day: string;
@@ -22,7 +12,6 @@ export interface CommunityEvent {
   time: string;
   location: string;
   tag: "important" | "fun" | null;
-  /** Detail-page fields; mock events leave them out. */
   description?: string | null;
   dateLabel?: string;
   organiser?: string | null;
@@ -30,62 +19,48 @@ export interface CommunityEvent {
   imageUrl?: string | null;
 }
 
-export type FeedType = "news" | "notice" | "job";
-
-export interface FeedPost {
-  id: string;
-  type: FeedType;
-  authorName: string;
-  authorInitials: string;
-  timeAgo: string;
-  title: string;
-  body: string;
-  /** Background image URL; text-only posts omit this. */
-  image?: string;
-  /** Taller image tile in the masonry layout. */
-  tall?: boolean;
-  likes: number;
-  comments: number;
-}
-
+/** A place on Explore, in the shape the cards render. */
 export interface Place {
   id: string;
   name: string;
-  category: Category;
+  /** Category name from the backend, e.g. "Learning". */
+  category: string;
   image: string;
+  location?: string;
   featured?: boolean;
   description?: string;
 }
 
-export interface Thread {
+/** A place category (Learning, Health…). Staff add new ones while adding places. */
+export interface ApiCategory {
   id: string;
-  authorName: string;
-  authorInitials: string;
-  avatarColor: string;
-  timeAgo: string;
-  group: string;
-  title: string;
-  body: string;
-  likes: number;
-  replies: number;
+  name: string;
 }
 
 /**
- * A post as the backend returns it from `/api/posts` — distinct from the
- * mock-data `FeedPost` / `Thread` shapes above, which the components still use
- * until the feed is wired to the real API.
+ * How another member appears: post authors, commenters, group members,
+ * service providers. The backend's public projection — it never has an email.
  */
+export interface PublicUser {
+  id: string;
+  username: string;
+  /** Name from their Google account ("Thabo Mokoena"); filled in on their next sign-in. */
+  displayName?: string | null;
+  avatarUrl?: string | null;
+  role?: string;
+  badge?: string | null;
+  createdAt?: string;
+}
+
+export type PostType = "COMMUNITY" | "NEWS" | "NOTICE" | "JOB" | "INFORMATIONAL";
+
+/** A post as the backend returns it from `/api/posts`. */
 export interface ApiPost {
   id: string;
   authorId: string;
-  author: {
-    id: string;
-    username: string;
-    avatarUrl?: string | null;
-    role?: string;
-    badge?: string | null;
-  };
-  type: "COMMUNITY" | "NEWS" | "NOTICE" | "JOB" | "INFORMATIONAL";
+  /** Missing on the response to creating a post — fill it from the signed-in profile. */
+  author?: PublicUser | null;
+  type: PostType;
   title: string;
   body: string;
   imageUrl?: string | null;
@@ -94,6 +69,42 @@ export interface ApiPost {
   likeCount: number;
   commentCount: number;
   likedByCurrentUser?: boolean;
+}
+
+/** A comment on a post. A reply points at a top-level comment (one level deep). */
+export interface ApiComment {
+  id: string;
+  postId: string;
+  authorId: string;
+  /** Missing on the response to adding a comment — fill it from the signed-in profile. */
+  author?: PublicUser | null;
+  body: string;
+  parentCommentId?: string | null;
+  createdAt: string;
+}
+
+/** What liking or unliking returns. */
+export interface LikeSummary {
+  likeCount: number;
+  likedByCurrentUser: boolean;
+}
+
+/** `GET /api/users/recent`: the newest members and how many joined this week. */
+export interface RecentMembers {
+  members: PublicUser[];
+  joinedThisWeek: number;
+}
+
+export type SponsorPlacement = "HOME" | "EXPLORE" | "COMMUNITY" | "SERVICES" | "FEED";
+
+/** A booked sponsor slot from `/api/sponsors/active`. */
+export interface ApiSponsor {
+  id: string;
+  title: string;
+  pitch?: string | null;
+  imageUrl?: string | null;
+  targetUrl?: string | null;
+  placement: SponsorPlacement;
 }
 
 /** Spring's `Page<T>` envelope. */
@@ -106,18 +117,6 @@ export interface Page<T> {
   last: boolean;
   first: boolean;
   empty: boolean;
-}
-
-export interface Group {
-  id: string;
-  icon: string;
-  name: string;
-  members: number;
-}
-
-export interface Member {
-  initials: string;
-  color: string;
 }
 
 /** Malangeni Library details from `/api/library`. Times are "HH:mm:ss"; a null pair means closed. */
@@ -137,7 +136,7 @@ export interface LibraryDetails {
 
 /**
  * Notification categories a member can opt in/out of. Each maps to a source of
- * updates on the hub (job openings, events, news, service alerts, community
+ * updates on the hub (job openings, events, news, services, community
  * activity). Preferences are stored per-category — see NotificationsContext.
  */
 export type NotificationCategory =
@@ -152,8 +151,10 @@ export interface AppNotification {
   category: NotificationCategory;
   title: string;
   body: string;
-  /** Human-friendly relative time, e.g. "2h", "1d". */
+  /** Human-friendly relative time, e.g. "2 hours ago". */
   timeAgo: string;
+  /** When the thing happened, for sorting. */
+  createdAt: string;
   /** Where tapping the notification takes the member. */
   href: string;
 }
@@ -173,7 +174,7 @@ export interface GroupMembership {
   id: string;
   groupId: string;
   userId: string;
-  user?: { id: string; username: string; avatarUrl?: string | null; role?: string; badge?: string | null };
+  user?: PublicUser;
   joinedAt: string;
 }
 
@@ -192,10 +193,10 @@ export interface ApiEvent {
   imageUrl?: string | null;
   /** The hub team's note to the organiser (what to change, or how it was checked). */
   reviewNote?: string | null;
-  reviewedBy?: { id: string; username: string } | null;
+  reviewedBy?: PublicUser | null;
   reviewedAt?: string | null;
   createdAt?: string;
-  organiser?: { id: string; username: string } | null;
+  organiser?: PublicUser | null;
 }
 
 /**
@@ -205,7 +206,7 @@ export interface ApiEvent {
 export interface Shop {
   id: string;
   ownerId: string;
-  owner?: { id: string; username: string; avatarUrl?: string | null; badge?: string | null };
+  owner?: PublicUser;
   name: string;
   description?: string | null;
   phone?: string | null;
@@ -261,17 +262,17 @@ export interface ApiService {
   name: string;
   serviceCategory: ServiceCategory;
   description?: string | null;
-  /** SA cellphone number — public on purpose, so people can book. */
+  /** SA cellphone number — public on purpose, so people can get in touch. */
   contactNumber?: string | null;
   areaServed?: string | null;
   operatingHours?: string | null;
   imageUrl?: string | null;
   status?: EventStatus;
   reviewNote?: string | null;
-  reviewedBy?: { id: string; username: string } | null;
+  reviewedBy?: PublicUser | null;
   reviewedAt?: string | null;
   providerId?: string | null;
-  provider?: { id: string; username: string; avatarUrl?: string | null; role?: string; badge?: string | null } | null;
+  provider?: PublicUser | null;
   createdAt?: string;
 }
 

@@ -1,25 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useAuth } from "@/lib/auth/AuthContext";
 import type { ApiEvent } from "@/lib/types";
+import { RequireAuth } from "@/components/auth/RequireAuth";
 import { EventForm } from "./EventForm";
 
 /** Any signed-in member can submit an event; the hub team approves it before it goes public. */
 export function SubmitEvent() {
-  const { firebaseUser, profile, loading, error: authError } = useAuth();
-  const router = useRouter();
+  return (
+    <RequireAuth>
+      <SubmitEventForm />
+    </RequireAuth>
+  );
+}
+
+function SubmitEventForm() {
   const [done, setDone] = useState<{ event: ApiEvent; warning?: string } | null>(null);
-
-  useEffect(() => {
-    if (!loading && !firebaseUser) router.replace("/login");
-  }, [loading, firebaseUser, router]);
-
-  if (!profile) {
-    return <p className="py-14 text-[14px] text-muted">{authError ?? "Loading…"}</p>;
-  }
 
   if (done) {
     const live = done.event.status === "APPROVED";
@@ -60,8 +57,7 @@ export function SubmitEvent() {
   return (
     <section className="mb-16 max-w-[720px] rounded-card border border-line bg-card p-6">
       <p className="mb-5 text-[13.5px] text-muted">
-        Events are checked by the hub team before they appear. It&apos;s gone
-        automatically once the day has passed.
+        Events are checked by the hub team before they appear. It&apos;s gone automatically once the day has passed.
       </p>
       <EventForm onSaved={(event, warning) => setDone({ event, warning })} />
     </section>

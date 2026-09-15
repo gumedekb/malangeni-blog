@@ -29,8 +29,8 @@ export type AccountType = "MEMBER" | "BUSINESS_FORMAL" | "BUSINESS_INFORMAL";
  * The backend's own user record, returned by `GET /api/auth/me`.
  *
  * It is created automatically on the user's first authenticated request —
- * there is no registration step, and the username is derived from the email
- * local part.
+ * there is no registration step. The username is built from the Google name
+ * ("thabo.mokoena"), with a number added when it's already taken.
  *
  * `id` is the identifier every other backend API uses. The Firebase uid is
  * never exposed by the backend, so ownership checks must compare against
@@ -39,6 +39,8 @@ export type AccountType = "MEMBER" | "BUSINESS_FORMAL" | "BUSINESS_INFORMAL";
 export interface Profile {
   id: number | string;
   username: string;
+  /** Name from their Google account ("Thabo Mokoena"); kept in step on every sign-in. */
+  displayName?: string | null;
   email: string;
   role: Role;
   createdAt: string;
@@ -85,6 +87,8 @@ export function normalizeProfile(raw: RawProfile): Profile {
 export interface PublicProfile {
   id: number | string;
   username: string;
+  /** Name from their Google account; absent until their next sign-in. */
+  displayName?: string | null;
   /** Backstage staff come back as USER. */
   role?: Role;
   createdAt?: string;

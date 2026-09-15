@@ -131,7 +131,7 @@ function ServiceReviewCard({ service, onChanged }: { service: ApiService; onChan
           width={1200}
           height={675}
           unoptimized
-          className="h-auto max-h-[220px] w-full object-cover"
+          className="mx-auto block h-auto max-h-[220px] w-auto max-w-full"
         />
       )}
       <div className="p-5">

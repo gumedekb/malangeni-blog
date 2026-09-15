@@ -1,4 +1,5 @@
 import type { ApiEvent, CommunityEvent } from "./types";
+import { nameOf } from "./users";
 
 /**
  * Converts a backend event into the shape the event components already render,
@@ -21,7 +22,7 @@ export function toCommunityEvent(e: ApiEvent): CommunityEvent {
       month: "long",
       year: "numeric",
     }),
-    organiser: e.organiser?.username ?? null,
+    organiser: e.organiser ? nameOf(e.organiser) : null,
     contactNumber: e.contactNumber ?? null,
     imageUrl: e.imageUrl ?? null,
   };

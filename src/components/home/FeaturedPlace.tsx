@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, PLACE_ENDPOINTS } from "@/lib/api";
 import { byRating } from "@/lib/places";
+import { fillImage } from "@/lib/cloudinary";
 import type { ApiAttraction, Page } from "@/lib/types";
 
 /** The hero "Featured place" card on the home page: the best-rated place on Explore. */
@@ -32,7 +33,7 @@ export function FeaturedPlace() {
         role="img"
         aria-label={place ? place.name : "Featured place"}
         className="min-h-[200px] bg-paper bg-cover bg-center md:min-h-[280px]"
-        style={place?.imageUrl ? { backgroundImage: `url('${place.imageUrl}')` } : undefined}
+        style={place?.imageUrl ? { backgroundImage: `url('${fillImage(place.imageUrl, 1000, 700)}')` } : undefined}
       />
       <div className="flex flex-col p-[22px]">
         <span className="text-[11px] font-semibold uppercase tracking-[1.5px] text-gold">

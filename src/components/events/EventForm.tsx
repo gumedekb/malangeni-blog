@@ -13,6 +13,8 @@ import {
   PRIMARY_BUTTON,
   SECONDARY_BUTTON,
 } from "@/components/staff/ui";
+import { FilePreview } from "@/components/ui/FilePreview";
+import { ImageCropDialog, POSTER_SHAPES } from "@/components/ui/ImageCropDialog";
 
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -49,6 +51,8 @@ export function EventForm({
   const [description, setDescription] = useState(event?.description ?? "");
   const [tag, setTag] = useState<ApiEvent["tag"]>(event?.tag ?? "FUN");
   const [image, setImage] = useState<File | null>(null);
+  // The picked file waiting in the cropper; `image` is what gets uploaded.
+  const [cropFile, setCropFile] = useState<File | null>(null);
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -242,7 +246,18 @@ export function EventForm({
 
         <div className="sm:col-span-2">
           <Label htmlFor={`${p}-image`}>Picture (optional)</Label>
-          {event?.imageUrl && !image && (
+          {image ? (
+            <div className="mb-2">
+              <FilePreview file={image} alt="New event picture" className="h-auto max-h-48 w-auto rounded-lg border border-line" />
+              <button
+                type="button"
+                onClick={() => setImage(null)}
+                className="mt-1.5 cursor-pointer text-[12.5px] font-semibold text-accent"
+              >
+                Remove new picture
+              </button>
+            </div>
+          ) : event?.imageUrl ? (
             <Image
               src={event.imageUrl}
               alt="Current event picture"
@@ -251,16 +266,27 @@ export function EventForm({
               unoptimized
               className="mb-2 h-auto w-40 rounded-lg border border-line"
             />
-          )}
+          ) : null}
           <input
             id={`${p}-image`}
             type="file"
             accept={IMAGE_TYPES.join(",")}
-            onChange={(e) => setImage(e.target.files?.[0] ?? null)}
+            onChange={(e) => {
+              const file = e.target.files?.[0] ?? null;
+              // Let the same file be chosen again after cancelling the cropper.
+              e.target.value = "";
+              if (!file) return;
+              if (!IMAGE_TYPES.includes(file.type)) {
+                setErrors((prev) => ({ ...prev, image: "The picture must be a JPEG, PNG or WebP." }));
+                return;
+              }
+              setErrors((prev) => ({ ...prev, image: undefined }));
+              setCropFile(file);
+            }}
             className="block w-full text-[13px] text-muted file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-line file:bg-card file:px-3 file:py-2 file:text-[13px] file:font-semibold file:text-ink"
           />
           <p className="mt-1 text-[12px] text-muted">
-            A poster or photo. JPEG, PNG or WebP, up to 5MB.
+            A poster or photo. You&apos;ll frame it before it&apos;s added. JPEG, PNG or WebP.
           </p>
           <FieldError>{errors.image}</FieldError>
         </div>
@@ -276,6 +302,19 @@ export function EventForm({
           </button>
         )}
       </div>
+
+      {cropFile && (
+        <ImageCropDialog
+          file={cropFile}
+          shapes={POSTER_SHAPES}
+          title="Frame your event picture"
+          onCancel={() => setCropFile(null)}
+          onDone={(cropped) => {
+            setImage(cropped);
+            setCropFile(null);
+          }}
+        />
+      )}
     </form>
   );
 }
